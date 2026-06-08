@@ -1,0 +1,193 @@
+---
+title: "Batch Operations: Create Decks and Slides Atomically"
+sidebarTitle: "Batch Operations"
+description: "Create an entire deck, slides, and layers tree in one atomic commit. Learn RequestOptions, CommitReceipt, and safe-retry idempotency."
+---
+
+Every call to `ablo.decks.create()` is a single atomic commit to the Ablo API. You describe the entire structure — deck metadata, slides, and their layers — as a plain JavaScript object, and the SDK compiles it into one batch of operations that either all succeed or all fail together. This declarative approach means you get transactional safety and minimal network round trips with no extra configuration.
+
+## Why one call beats many
+
+When you build a presentation by calling `slides.create()` and `layers.create()` individually, a network failure partway through leaves your deck in a partially-written state. The declarative pattern sidesteps this entirely: the full tree goes into one commit, so readers never see an incomplete deck.
+
+<CardGroup cols={2}>
+  <Card title="All-or-nothing atomicity" icon="shield-check">
+    Every slide and layer in the tree commits together. A failure rolls the entire operation back.
+  </Card>
+  <Card title="Fewer round trips" icon="bolt">
+    One HTTP request replaces N sequential calls, cutting latency for large decks.
+  </Card>
+  <Card title="IDs minted up front" icon="fingerprint">
+    `decks.create()` returns every resource ID immediately, so you can store them for future updates without a second read.
+  </Card>
+  <Card title="Safe retries" icon="rotate">
+    Pass an `idempotencyKey` and re-run your code as many times as needed — duplicates are deduplicated server-side.
+  </Card>
+</CardGroup>
+
+## Creating a deck atomically
+
+Pass `slides` (each containing `layers`) directly inside `decks.create()`. The SDK compiles all of them into one commit.
+
+```typescript
+import { Decks } from '@abloatai/decks';
+
+const ablo = new Decks(process.env.ABLO_API_KEY);
+
+const deck = await ablo.decks.create({
+  title: 'Annual Report',
+  slides: [
+    {
+      title: 'Title Slide',
+      layers: [
+        {
+          type: 'text',
+          text: 'FY2024 Annual Report',
+          style: 'title',
+          at: { x: 160, y: 400, w: 1600, h: 200 },
+        },
+        {
+          type: 'text',
+          text: 'Acme Corporation',
+          style: 'h2',
+          at: { x: 160, y: 620, w: 1600, h: 100 },
+        },
+      ],
+    },
+    {
+      title: 'Revenue',
+      layers: [
+        {
+          type: 'text',
+          text: 'Revenue Growth',
+          style: 'h1',
+          at: { x: 160, y: 80, w: 1600, h: 120 },
+        },
+        {
+          type: 'bar',
+          data: [
+            { label: 'Q1', value: 1.2 },
+            { label: 'Q2', value: 1.5 },
+            { label: 'Q3', value: 1.8 },
+            { label: 'Q4', value: 2.1 },
+          ],
+          at: { x: 160, y: 240, w: 1600, h: 720 },
+        },
+      ],
+    },
+  ],
+}, { wait: 'confirmed' });
+
+console.log('Deck ID:', deck.id);
+console.log('Slide IDs:', deck.slides.map(s => s.id));
+console.log('Layer IDs:', deck.slides.flatMap(s => s.layers.map(l => l.id)));
+```
+
+The return value is a `DeckResource` that includes the `id` of every created resource — hold on to the layer IDs if you plan to update them later (see [Incremental Updates](/guides/incremental-updates)).
+
+## RequestOptions
+
+Every `create`, `update`, and `delete` method accepts an optional second argument of type `RequestOptions`:
+
+```typescript
+interface RequestOptions {
+  wait?: 'queued' | 'confirmed'; // default: 'confirmed'
+  idempotencyKey?: string | null;
+}
+```
+
+### `wait`
+
+The `wait` field controls how long the server waits before returning a response.
+
+| Value | Behaviour | When to use |
+|---|---|---|
+| `'confirmed'` (default) | Waits for durable persistence before responding. When the call returns, the data is safely stored. | Scripts, data pipelines, anything that must guarantee the write landed. |
+| `'queued'` | Returns as soon as the server accepts the message, before it is persisted. Faster, but you cannot assume the write is durable. | Fire-and-forget jobs where you will verify success out of band. |
+
+### `idempotencyKey`
+
+Passing an `idempotencyKey` makes your call safe to retry. If the server receives two requests with the same key, it executes the operation only once and returns the same `CommitReceipt` for both.
+
+```typescript
+import { randomUUID } from 'crypto';
+
+const key = `deck-create-${reportId}`; // stable, derived from your own data
+
+const deck = await ablo.decks.create(
+  { title: 'Q4 Report', slides: [ /* … */ ] },
+  { wait: 'confirmed', idempotencyKey: key },
+);
+```
+
+<Tip>
+  Derive your idempotency key from a stable identifier in your own system — a report ID, job ID, or hash of the input. That way the key is consistent across retries without you needing to store it separately.
+</Tip>
+
+## CommitReceipt
+
+Mutation methods (`update`, `delete`, and the underlying commit) return a `CommitReceipt`:
+
+```typescript
+interface CommitReceipt {
+  id: string;          // unique commit ID
+  status: CommitWait;  // 'queued' | 'confirmed'
+  lastSyncId?: number; // sequence number for real-time subscriptions
+}
+```
+
+`decks.create()` returns a `DeckResource` (which includes the full ID tree) rather than a bare `CommitReceipt`, but every other mutation method returns the receipt directly.
+
+## Adding a slide to an existing deck
+
+You can add slides one at a time to a deck you created earlier. `slides.create()` is itself an atomic commit that creates the slide and all of its layers together.
+
+```typescript
+const deckId = 'deck_existing_123';
+
+// Find the current slide count so you can set the right order.
+const existing = await ablo.slides.list({ deckId });
+
+const slide = await ablo.slides.create({
+  deckId,
+  order: existing.length,
+  title: 'Appendix',
+  layers: [
+    {
+      type: 'text',
+      text: 'Supporting Data',
+      style: 'h1',
+      at: { x: 160, y: 80, w: 1600, h: 120 },
+    },
+    {
+      type: 'table',
+      columns: ['Region', 'Revenue', 'Growth'],
+      rows: [
+        ['North America', '$4.2M', '+18%'],
+        ['Europe', '$2.8M', '+12%'],
+        ['APAC', '$1.9M', '+31%'],
+      ],
+      at: { x: 160, y: 260, w: 1600, h: 600 },
+    },
+  ],
+});
+
+console.log('New slide ID:', slide.id);
+```
+
+## Putting it all together
+
+<Steps>
+  <Step title="Describe the full tree">
+    Build your deck, slides, and layers as a single nested object. Use layer builder functions like `barChart()` and `bullets()` for complex content types.
+  </Step>
+  <Step title="Choose your wait level">
+    Pass `{ wait: 'confirmed' }` (the default) for scripts that need the write to land before moving on, or `{ wait: 'queued' }` for high-throughput pipelines where you verify asynchronously.
+  </Step>
+  <Step title="Add an idempotency key for retries">
+    Derive a stable key from your own data and pass it as `idempotencyKey`. Re-running the same code won't create duplicate decks.
+  </Step>
+  <Step title="Store the returned IDs">
+    `decks.create()` returns every resource ID up front. Store the layer IDs you care about — you'll need them for incremental updates later.
+  </Step>
+</Steps>

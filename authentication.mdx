@@ -1,0 +1,101 @@
+---
+title: "Ablo Decks SDK Authentication: API Keys and Config"
+sidebarTitle: "Authentication"
+description: "Learn how to obtain an Ablo API key, pass it to the Decks client, secure it with environment variables, and understand what happens when it is missing."
+---
+
+Every request the Ablo Decks SDK makes to the API is authenticated with a server-side API key. The key identifies your workspace and authorises all create, read, update, and delete operations. You supply it once when you construct the `Decks` client, and the SDK attaches it as a Bearer token on every subsequent call.
+
+## Obtaining an API key
+
+API keys are issued per Ablo workspace. To get yours:
+
+1. Sign in at [tryablo.com](https://tryablo.com) and open your workspace.
+2. Go to **Settings → API**.
+3. Copy the key shown on that page.
+
+Keep the key safe — it has full access to your workspace. If you suspect a key has been compromised, rotate it from the same **Settings → API** page.
+
+## Passing your API key
+
+The `Decks` constructor accepts your key in three equivalent forms. Choose whichever fits your project's configuration style.
+
+```typescript
+import { Decks } from '@abloatai/decks';
+
+// 1. Direct string — convenient for quick scripts, avoid in production
+const ablo = new Decks('your-api-key');
+
+// 2. Environment variable (recommended) — the SDK reads ABLO_API_KEY automatically
+const ablo = new Decks(process.env.ABLO_API_KEY);
+
+// 3. Options object — useful when you also need to set a custom base URL
+const ablo = new Decks({ apiKey: process.env.ABLO_API_KEY });
+```
+
+All three forms produce an identical client. The SDK resolves the key in priority order: explicit argument first, then `ABLO_API_KEY` from the environment.
+
+### Using the environment variable
+
+Setting `ABLO_API_KEY` in your environment means you can construct the client with no arguments at all and the SDK will pick up the key automatically:
+
+```typescript
+// With ABLO_API_KEY set in the environment, no argument is needed
+const ablo = new Decks();
+```
+
+For local development, add the variable to your shell profile or a `.env` file:
+
+```bash
+# .env
+ABLO_API_KEY=your-api-key-here
+```
+
+Then load it at the top of your entry file with a tool like `dotenv`:
+
+```typescript
+import 'dotenv/config';
+import { Decks } from '@abloatai/decks';
+
+const ablo = new Decks(); // picks up ABLO_API_KEY from .env
+```
+
+<Warning>
+  Never commit your API key to source control. Add `.env` to your `.gitignore` file and use environment-level secrets (e.g. GitHub Actions secrets, Vercel environment variables) in CI/CD pipelines.
+</Warning>
+
+## What happens when the key is missing
+
+If the `Decks` constructor cannot find an API key — neither in the argument nor in `ABLO_API_KEY` — it throws synchronously before any network call is made:
+
+```
+Error: new Decks(...) requires an API key — pass it directly or set ABLO_API_KEY.
+```
+
+This fail-fast behaviour means a misconfigured environment surfaces at startup rather than during a request, making it easier to catch in tests and deployment checks.
+
+## Security best practices
+
+Follow these guidelines to keep your API keys safe in any environment:
+
+- **Use environment variables** rather than hardcoding keys in source files. The `ABLO_API_KEY` convention is supported natively by the SDK.
+- **Restrict key exposure** to server-side code only. Never bundle an API key into a client-side JavaScript bundle or a mobile app binary.
+- **Rotate keys regularly** — especially after personnel changes or if a key may have been exposed. Generate a new key from **Settings → API** and update your secrets store.
+- **Audit access** periodically. If your Ablo workspace supports multiple keys, remove any that are no longer in use.
+
+<Note>
+  Your API key is the only credential the SDK requires. There are no OAuth flows, no token refresh cycles, and no session cookies — just the Bearer key on every request.
+</Note>
+
+## Custom base URL (advanced)
+
+In rare cases — such as pointing at a private Ablo deployment or a local development proxy — you can override the default base URL (`https://api.abloatai.com`) via the options object:
+
+```typescript
+const ablo = new Decks({
+  apiKey: process.env.ABLO_API_KEY,
+  baseURL: 'https://your-custom-endpoint.example.com',
+});
+```
+
+Leave `baseURL` unset for all standard Ablo workspace usage.

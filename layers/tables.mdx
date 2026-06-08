@@ -1,0 +1,319 @@
+---
+title: "Table Layers: Columns, Rows, Cell Styles & Cell Spans"
+sidebarTitle: "Tables"
+description: "Build richly styled tables with the table() builder — define columns, rows, alternating colors, borders, and cell spans in one call."
+---
+
+Tables in the Decks SDK give you the full spreadsheet-style layout experience: column definitions with per-column alignment and width, cells that accept plain values or rich styled objects with span merging, and a `styles` block that controls header appearance, body cells, alternating row colors, and border presets. The `table()` builder validates every input through Zod and produces a canonical table document ready for placement.
+
+You can author a table with the `table()` builder function or with the inline `{ type: 'table', columns, rows, ... }` object syntax. The builder supports the full option set including `styles` and `showGridLines`; the inline syntax supports `columns`, `rows`, and `headerRows`.
+
+---
+
+## Basic example
+
+```typescript
+import { table } from '@abloatai/decks';
+
+const layer = table({
+  columns: ['Quarter', 'Revenue ($M)', 'Growth'],
+  rows: [
+    ['Q1 2024', '1,200', '+18%'],
+    ['Q2 2024', '1,850', '+34%'],
+    ['Q3 2024', '1,620', '+22%'],
+    ['Q4 2024', '2,100', '+41%'],
+  ],
+});
+```
+
+---
+
+## Columns
+
+Columns define the table's structure. Each column can be a plain string header label, or a rich object for alignment, width, and per-column styling.
+
+### Simple string columns
+
+When you pass a string, the SDK uses it as the header label and auto-generates a stable key from it (lowercased, spaces replaced with underscores).
+
+```typescript
+columns: ['Company', 'ARR ($M)', 'Employees', 'Stage']
+```
+
+### Rich column objects
+
+Use a rich column object when you need to control alignment, width, or per-column cell styling.
+
+<ParamField body="header" type="string" required>
+  The column header label displayed in the first row.
+</ParamField>
+
+<ParamField body="key" type="string">
+  Stable column key used internally to map row cell values. Auto-generated from `header` when omitted. Set this explicitly when you need predictable keys for later chart operations or incremental updates.
+</ParamField>
+
+<ParamField body="align" type="'left' | 'center' | 'right'">
+  Horizontal text alignment for all cells in this column, including the header. Can be overridden per cell.
+</ParamField>
+
+<ParamField body="verticalAlign" type="'top' | 'middle' | 'bottom'">
+  Vertical cell alignment for all cells in this column.
+</ParamField>
+
+<ParamField body="width" type="number">
+  Fixed column width in pixels. When omitted, columns share available width equally.
+</ParamField>
+
+<ParamField body="style" type="CellStyle">
+  Per-column style applied to all body cells in this column (not the header). See [CellStyle](#cellstyle-fields) below.
+</ParamField>
+
+```typescript
+columns: [
+  { header: 'Company', key: 'company', align: 'left', width: 280 },
+  { header: 'ARR ($M)', key: 'arr', align: 'right', width: 140 },
+  { header: 'YoY Growth', key: 'growth', align: 'right', width: 140 },
+  { header: 'Stage', key: 'stage', align: 'center', width: 120 },
+]
+```
+
+---
+
+## Rows
+
+Rows are arrays of arrays. Each inner array holds the cell values for one row, positionally matching the columns definition. Cell values can be strings, numbers, `null`, or rich cell objects.
+
+### Simple cell values
+
+Strings and numbers are the most common cell types. Numbers are converted to strings automatically.
+
+```typescript
+rows: [
+  ['Acme Corp', 42.5, '+28%', 'Series B'],
+  ['Globex Inc', 18.2, '+15%', 'Series A'],
+  ['Initech', 91.0, '+55%', 'Growth'],
+]
+```
+
+Use `null` for an empty cell:
+
+```typescript
+rows: [
+  ['Subtotal', 151.7, null, null],
+]
+```
+
+### Rich cell objects
+
+When you need per-cell styling, span merging, or custom alignment, use a rich cell object.
+
+<ParamField body="text" type="string">
+  Cell text content as a plain string.
+</ParamField>
+
+<ParamField body="content" type="object">
+  Advanced: a pre-built rich text document for content with inline formatting (bold, italic, inline code, etc.). Use `text` for plain strings.
+</ParamField>
+
+<ParamField body="align" type="'left' | 'center' | 'right'">
+  Horizontal alignment override for this cell, overriding the column's default.
+</ParamField>
+
+<ParamField body="verticalAlign" type="'top' | 'middle' | 'bottom'">
+  Vertical alignment override for this cell.
+</ParamField>
+
+<ParamField body="backgroundColor" type="string">
+  Background color override for this cell as a CSS color string.
+</ParamField>
+
+<ParamField body="colSpan" type="number">
+  Number of columns this cell spans. Must be a positive integer.
+</ParamField>
+
+<ParamField body="rowSpan" type="number">
+  Number of rows this cell spans. Must be a positive integer.
+</ParamField>
+
+```typescript
+rows: [
+  // Merged header cell spanning 4 columns
+  [{ text: 'Q4 2024 Performance Summary', colSpan: 4, align: 'center', backgroundColor: '#1e1b4b' }],
+  // Regular data row with one highlighted cell
+  ['Acme Corp', '42.5', { text: '+28%', backgroundColor: '#dcfce7', align: 'right' }, 'Series B'],
+]
+```
+
+---
+
+## Table styles
+
+The `styles` object controls the visual appearance of the entire table. Pass it as the `styles` key on your table input.
+
+<ParamField body="header" type="CellStyle">
+  Style applied to all header row cells. See [CellStyle fields](#cellstyle-fields).
+</ParamField>
+
+<ParamField body="cells" type="CellStyle">
+  Default style applied to all body cells (overridden by column styles and per-cell styles).
+</ParamField>
+
+<ParamField body="alternatingRows" type="{ even: CellStyle, odd: CellStyle }">
+  Alternating row background colors. `even` applies to rows at index 0, 2, 4… and `odd` to rows at index 1, 3, 5… (zero-indexed, excluding the header).
+</ParamField>
+
+<ParamField body="borders" type="'none' | 'horizontal' | 'vertical' | 'all' | 'outer'">
+  Border preset for the table:
+  - `'none'` — no borders
+  - `'horizontal'` — lines between rows only
+  - `'vertical'` — lines between columns only
+  - `'all'` — full grid of borders
+  - `'outer'` — border around the table perimeter only
+</ParamField>
+
+<ParamField body="borderColor" type="string">
+  CSS color for borders drawn by the `borders` preset.
+</ParamField>
+
+<ParamField body="borderWidth" type="number">
+  Border thickness in pixels. Defaults to 1.
+</ParamField>
+
+<ParamField body="borderRadius" type="number">
+  Corner radius in pixels for the outer table border.
+</ParamField>
+
+---
+
+## CellStyle fields
+
+`CellStyle` applies to header cells, body cells, column defaults, and alternating row entries.
+
+<ParamField body="backgroundColor" type="string">
+  Cell background color as a CSS color string.
+</ParamField>
+
+<ParamField body="align" type="'left' | 'center' | 'right'">
+  Horizontal text alignment.
+</ParamField>
+
+<ParamField body="verticalAlign" type="'top' | 'middle' | 'bottom'">
+  Vertical text alignment within the cell.
+</ParamField>
+
+<ParamField body="color" type="string">
+  Text color.
+</ParamField>
+
+<ParamField body="fontFamily" type="string">
+  Font family for cell text.
+</ParamField>
+
+<ParamField body="fontSize" type="string">
+  Font size as a CSS string, e.g. `'14px'`.
+</ParamField>
+
+<ParamField body="fontWeight" type="string | number">
+  Font weight, e.g. `600` or `'bold'`.
+</ParamField>
+
+<ParamField body="borderColor" type="string">
+  Per-cell border color override.
+</ParamField>
+
+<ParamField body="padding" type="string">
+  Cell padding as a CSS shorthand, e.g. `'8px 16px'`.
+</ParamField>
+
+---
+
+## Other options
+
+<ParamField body="headerRows" type="number">
+  Number of rows to treat as header rows. Defaults to `1`. Set to `0` to suppress header styling, or `2` for a two-row header with merged spans above.
+</ParamField>
+
+<ParamField body="showGridLines" type="boolean">
+  When `true`, renders subtle grid lines between all cells. Independent of the `borders` style preset.
+</ParamField>
+
+---
+
+## Complete styled example
+
+```typescript
+import { table } from '@abloatai/decks';
+
+const layer = table({
+  columns: [
+    { header: 'Company', key: 'company', align: 'left', width: 260 },
+    { header: 'ARR ($M)', key: 'arr', align: 'right', width: 140 },
+    { header: 'YoY Growth', key: 'growth', align: 'right', width: 140 },
+    { header: 'Headcount', key: 'headcount', align: 'right', width: 120 },
+    { header: 'Stage', key: 'stage', align: 'center', width: 130 },
+  ],
+  rows: [
+    ['Acme Corp',   '142.5', { text: '+34%', backgroundColor: '#dcfce7' }, '1,240', 'Public'],
+    ['Globex Inc',  '98.2',  { text: '+28%', backgroundColor: '#dcfce7' }, '820',   'Series D'],
+    ['Initech',     '61.0',  { text: '+12%', backgroundColor: '#fef9c3' }, '430',   'Series C'],
+    ['Umbrella Co', '34.8',  { text: '-4%',  backgroundColor: '#fee2e2' }, '290',   'Series B'],
+    // Summary row spanning label columns
+    [
+      { text: 'Portfolio Total', colSpan: 1, align: 'left' },
+      '336.5',
+      { text: '+22% avg', align: 'right' },
+      '2,780',
+      '—',
+    ],
+  ],
+  styles: {
+    header: {
+      backgroundColor: '#1e1b4b',
+      color: '#ffffff',
+      fontWeight: 600,
+      fontSize: '14px',
+      padding: '12px 16px',
+    },
+    cells: {
+      fontSize: '14px',
+      padding: '10px 16px',
+      color: '#111827',
+    },
+    alternatingRows: {
+      even: { backgroundColor: '#f9fafb' },
+      odd:  { backgroundColor: '#ffffff' },
+    },
+    borders: 'horizontal',
+    borderColor: '#e5e7eb',
+    borderWidth: 1,
+    borderRadius: 8,
+  },
+  headerRows: 1,
+});
+```
+
+### Inline syntax equivalent
+
+The same table using the inline layer object:
+
+```typescript
+const layer = {
+  type: 'table' as const,
+  columns: [
+    { header: 'Company', align: 'left' as const, width: 260 },
+    { header: 'ARR ($M)', align: 'right' as const, width: 140 },
+    { header: 'YoY Growth', align: 'right' as const, width: 140 },
+  ],
+  rows: [
+    ['Acme Corp', '142.5', '+34%'],
+    ['Globex Inc', '98.2', '+28%'],
+    ['Initech', '61.0', '+12%'],
+  ],
+  headerRows: 1,
+  at: { x: 120, y: 240, w: 1680, h: 580 },
+};
+```
+
+<Tip>
+  Keep the `key` field explicit on columns when you plan to apply incremental updates to a table later. The SDK derives keys from header labels when omitted, which means renaming a column header would break any references keyed by the old derived value.
+</Tip>

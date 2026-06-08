@@ -1,0 +1,263 @@
+---
+title: "Incremental Updates: Patch Decks, Slides, and Layers"
+sidebarTitle: "Incremental Updates"
+description: "Update existing decks, slides, and layers in place by storing their IDs. Covers field patches, typed layer ops, read methods, and delete operations."
+---
+
+The Ablo SDK is designed for long-lived presentations that you update repeatedly. Rather than recreating a deck from scratch on every run, you create it once, store the IDs of the resources you care about, and then issue targeted patches on subsequent runs. This keeps your deck's history intact, avoids unnecessary churn, and is significantly more efficient for large presentations.
+
+## The hold-the-ID pattern
+
+`ablo.decks.create()` returns a `DeckResource` containing the `id` of every resource that was created — the deck itself, each slide, and each layer. Store these IDs in your own persistence layer (a database, a config file, an environment variable) on the first run, and use them directly on every subsequent run.
+
+```typescript
+import { Decks, barChart } from '@abloatai/decks';
+
+const ablo = new Decks(process.env.ABLO_API_KEY);
+
+// ── First run: create and store IDs ──────────────────────────────────
+const deck = await ablo.decks.create({
+  title: 'Live Dashboard',
+  slides: [
+    {
+      title: 'KPIs',
+      layers: [
+        {
+          type: 'bar',
+          data: initialData,
+          at: { x: 160, y: 200, w: 1600, h: 700 },
+        },
+      ],
+    },
+  ],
+});
+
+const chartLayerId = deck.slides[0].layers[0].id;
+// Store chartLayerId somewhere durable — e.g. a database or .env file
+
+// ── Subsequent runs: update the existing layer with fresh data ────────
+await ablo.layers.update({
+  id: chartLayerId,
+  data: barChart({ data: freshData }).data,
+});
+```
+
+<Tip>
+  You only need to call `decks.create()` once per presentation. On every run after that, go straight to the update methods using your stored IDs.
+</Tip>
+
+## Updating a deck
+
+Use `ablo.decks.update()` to change deck-level metadata. All fields except `id` are optional; only the fields you provide are changed.
+
+```typescript
+await ablo.decks.update({
+  id: deckId,
+  title: 'Live Dashboard — Updated',
+  themeId: 'theme_dark_123',
+  icon: 'chart-bar',
+  color: '#0EA5E9',
+});
+```
+
+**Available fields:**
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | `string` | The deck to update (required). |
+| `title` | `string` | New deck title. |
+| `themeId` | `string \| null` | Apply or remove a theme. |
+| `layoutId` | `string \| null` | Change the layout container. |
+| `icon` | `string` | Deck icon key. |
+| `color` | `string` | Accent color (hex). |
+
+## Updating a slide
+
+Use `ablo.slides.update()` to change a slide's metadata or settings.
+
+```typescript
+await ablo.slides.update({
+  id: slideId,
+  title: 'KPIs — Week 42',
+  notes: 'Present after the revenue summary.',
+  background: { type: 'solid', color: '#0F172A' },
+});
+```
+
+**Available fields:**
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | `string` | The slide to update (required). |
+| `title` | `string` | New slide title. |
+| `notes` | `string` | Speaker notes. |
+| `background` | `SlideBackgroundInput` | Solid color, gradient, or image. |
+| `size` | `SlideSizePresetId` | Switch to a size preset (e.g. `'16:9'`, `'4:3'`). |
+| `templateId` | `string` | Apply a layout template. |
+
+## Updating a layer
+
+Use `ablo.layers.update()` for field-level patches. This overwrites the entire field you specify, so pass the complete new value.
+
+```typescript
+// Move the layer to a new position
+await ablo.layers.update({
+  id: chartLayerId,
+  position: { x: 160, y: 160, width: 1600, height: 800 },
+});
+
+// Replace the chart data entirely
+await ablo.layers.update({
+  id: chartLayerId,
+  data: barChart({ data: freshData }).data,
+});
+
+// Update the layer's style
+await ablo.layers.update({
+  id: textLayerId,
+  style: { color: '#FFFFFF', fontSize: '48px' },
+});
+```
+
+**Available fields:**
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | `string` | The layer to update (required). |
+| `position` | `Partial<LayerPosition>` | Move or resize (`x`, `y`, `width`, `height`, `rotation`). |
+| `zIndex` | `number` | Stacking order. |
+| `contentJson` | `unknown` | Full TipTap document (text layers). |
+| `data` | `Record<string, unknown>` | Chart / table payload. |
+| `style` | `Record<string, unknown>` | CSS-like style properties. |
+| `imageFill` | `LayerImageFill` | Image fill for shape layers. |
+
+## Typed ops for charts, tables, and text
+
+For chart, table, and text layers, `ablo.layers.applyOp()` lets you apply a targeted, typed operation instead of replacing the entire payload. The SDK reads the current layer, applies the op with the same reducer the editor uses, and writes the result back — all in one method call.
+
+```typescript
+// Append a data series to a chart
+await ablo.layers.applyOp(chartLayerId, {
+  type: 'setDataSeries',
+  seriesIndex: 0,
+  values: [120, 168, 201, 245],
+});
+
+// Append a row to a table
+await ablo.layers.applyOp(tableLayerId, {
+  type: 'appendRow',
+  cells: [{ value: 'Q4' }, { value: '$2.4M' }, { value: '+22%' }],
+});
+
+// Change the font weight on all text in a text layer
+await ablo.layers.applyOp(textLayerId, {
+  type: 'setFontWeight',
+  weight: 700,
+});
+```
+
+<Warning>
+  `layers.applyOp()` performs a read-modify-write internally, so it requires a **readable client**. The standard `new Decks(apiKey)` constructor always provides one. If you ever construct the SDK with a commit-only transport, `applyOp` will throw a descriptive error.
+</Warning>
+
+## Reading resources
+
+Before updating, you may need to read the current state of a resource. Every resource type has a `retrieve()` method, and collections have a `list()` method.
+
+<CodeGroup>
+```typescript Deck
+const deck = await ablo.decks.retrieve(deckId);
+console.log(deck.title, deck.layoutId);
+```
+
+```typescript Slide
+const slide = await ablo.slides.retrieve(slideId);
+console.log(slide.title, slide.order, slide.settings);
+
+// List all slides in a deck, sorted by order
+const slides = await ablo.slides.list({ deckId });
+```
+
+```typescript Layer
+const layer = await ablo.layers.retrieve(layerId);
+console.log(layer.type, layer.position, layer.data);
+
+// List all layers on a slide
+const layers = await ablo.layers.list({ slideId });
+```
+</CodeGroup>
+
+## Deleting resources
+
+Every resource type has a `delete()` method. Deletions are atomic commits like all other mutations.
+
+```typescript
+// Delete a single layer
+await ablo.layers.delete(layerId);
+
+// Delete a slide (and all its layers)
+await ablo.slides.delete(slideId);
+
+// Delete a deck (and everything inside it)
+await ablo.decks.delete(deckId);
+```
+
+<Warning>
+  `decks.delete()` removes the deck and all of its slides and layers permanently. There is no undo. Make sure you are operating on the correct ID before calling it.
+</Warning>
+
+## Full live-update example
+
+The following pattern is typical for a dashboard or report that regenerates on a schedule.
+
+```typescript
+import { Decks, barChart } from '@abloatai/decks';
+
+const ablo = new Decks(process.env.ABLO_API_KEY);
+
+// On first run, create the deck and store the IDs you will reuse.
+async function bootstrap(): Promise<{ deckId: string; chartLayerId: string }> {
+  const deck = await ablo.decks.create({
+    title: 'Weekly KPI Dashboard',
+    slides: [
+      {
+        title: 'Revenue',
+        layers: [
+          {
+            type: 'text',
+            text: 'Revenue by Week',
+            style: 'h1',
+            at: { x: 160, y: 60, w: 1600, h: 120 },
+          },
+          {
+            type: 'bar',
+            data: [],
+            at: { x: 160, y: 220, w: 1600, h: 720 },
+          },
+        ],
+      },
+    ],
+  });
+
+  return {
+    deckId: deck.id,
+    chartLayerId: deck.slides[0].layers[1].id,
+  };
+}
+
+// On every subsequent run, update the chart with fresh data.
+async function refresh(chartLayerId: string, weeklyData: Array<{ label: string; value: number }>) {
+  await ablo.layers.update({
+    id: chartLayerId,
+    data: barChart({ data: weeklyData }).data,
+  });
+}
+
+// Update the deck title to reflect the latest refresh time
+async function stampTitle(deckId: string) {
+  const now = new Date().toLocaleDateString('en-US', {
+    month: 'short', day: 'numeric', year: 'numeric',
+  });
+  await ablo.decks.update({ id: deckId, title: `Weekly KPI Dashboard — ${now}` });
+}
+```

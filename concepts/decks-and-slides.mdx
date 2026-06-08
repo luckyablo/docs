@@ -1,0 +1,212 @@
+---
+title: "Decks, Slides, and the Presentation Model"
+sidebarTitle: "Decks & Slides"
+description: "Learn how decks, slides, and layers relate to each other, and how to create presentations both declaratively and imperatively with the Ablo Decks SDK."
+---
+
+A deck is a presentation. A slide belongs to exactly one deck, and a layer is a content element positioned on a slide. These three resources — deck, slide, layer — are the building blocks of everything the SDK produces. You can describe the entire tree in a single call, or you can build it incrementally by adding slides and layers one at a time; both approaches are fully supported and result in the same Ablo presentation.
+
+## The declarative pattern
+
+The fastest way to create a deck is to pass its entire structure — slides, layers, and all — to `ablo.decks.create()` in a single call. The entire tree is saved atomically: either everything is written or nothing is. There is no partial state to clean up if something goes wrong.
+
+```typescript
+import { Decks } from '@abloatai/decks';
+
+const ablo = new Decks(process.env.ABLO_API_KEY);
+
+const deck = await ablo.decks.create({
+  title: 'Q3 Update',
+  slides: [
+    {
+      title: 'Overview',
+      layers: [
+        {
+          type: 'text',
+          text: 'Q3 Results',
+          style: 'title',
+          at: { x: 160, y: 120, w: 1600, h: 200 },
+        },
+        {
+          type: 'bar',
+          data: [
+            { label: 'Jul', value: 420 },
+            { label: 'Aug', value: 610 },
+            { label: 'Sep', value: 780 },
+          ],
+          at: { x: 160, y: 380, w: 1200, h: 560 },
+        },
+      ],
+    },
+    {
+      title: 'Next Steps',
+      layers: [
+        {
+          type: 'bullets',
+          items: ['Expand to EMEA', 'Launch v2 product', 'Hire 20 engineers'],
+          at: { x: 160, y: 200, w: 1400, h: 600 },
+        },
+      ],
+    },
+  ],
+});
+
+// All IDs are available immediately — no extra fetches needed
+console.log(deck.id);
+console.log(deck.slides[0].id);
+console.log(deck.slides[0].layers[0].id);
+```
+
+## The imperative pattern
+
+When you need to add slides or layers after a deck is already created — for example, appending new slides in a loop or reacting to user input — use the individual `ablo.slides.create()` and `ablo.layers.create()` methods.
+
+```typescript
+// 1. Create the deck shell
+const deck = await ablo.decks.create({ title: 'Product Roadmap' });
+
+// 2. Add a slide to the deck
+const slide = await ablo.slides.create({
+  deckId: deck.id,
+  title: 'H1 Goals',
+  order: 0,
+});
+
+// 3. Add layers to the slide
+const titleLayer = await ablo.layers.create(slide.id, {
+  type: 'text',
+  text: 'H1 Goals',
+  style: 'h1',
+  at: { x: 160, y: 120, w: 1600, h: 160 },
+});
+
+const bodyLayer = await ablo.layers.create(slide.id, {
+  type: 'bullets',
+  items: ['Ship the API', 'Onboard 10 customers'],
+  at: { x: 160, y: 340, w: 1400, h: 500 },
+});
+
+console.log(titleLayer.id); // ready for future updates
+```
+
+<Tip>
+  You can mix both patterns. Create a deck declaratively for its first set of slides, then use `ablo.slides.create()` to append slides dynamically as your data grows.
+</Tip>
+
+## Client-minted IDs
+
+All resource IDs are generated on the client side — before the request is sent to the API. This means every ID returned from `decks.create()`, `slides.create()`, and `layers.create()` is available synchronously in the returned object without any extra round-trip. You can hold onto a layer ID immediately and use it to push updates in every subsequent run.
+
+```typescript
+const deck = await ablo.decks.create({
+  slides: [{ layers: [{ type: 'table', columns: ['Q', 'Rev'], rows: [], at: { x: 160, y: 200, w: 1400, h: 500 } }] }],
+});
+
+// Store this ID once — use it forever
+const revenueTableId = deck.slides[0].layers[0].id;
+
+// Later, in a scheduled job:
+await ablo.layers.update({
+  id: revenueTableId,
+  data: { columns: updatedColumns, rows: updatedRows },
+});
+```
+
+## Resource fields
+
+<CardGroup cols={3}>
+  <Card title="DeckResource" icon="rectangle-wide">
+    **`id`** — unique deck identifier  
+    **`title`** — display name  
+    **`layoutId`** — applied layout container, or `null`  
+    **`themeId`** — applied theme, or `null`  
+    **`slides`** — ordered array of `SlideResult`
+  </Card>
+  <Card title="SlideResource" icon="layer-group">
+    **`id`** — unique slide identifier  
+    **`deckId`** — parent deck  
+    **`title`** — display name  
+    **`order`** — integer position in the deck
+  </Card>
+  <Card title="LayerResource" icon="square-dashed">
+    **`id`** — unique layer identifier  
+    **`slideId`** — parent slide  
+    **`type`** — the persisted layer type (e.g. `text`, `chart`, `shape`)
+  </Card>
+</CardGroup>
+
+## Slide ordering
+
+The `order` field on a slide is an integer that determines where the slide appears in the deck. Slides are sorted ascending by `order`, so `order: 0` is the first slide. When you use the declarative `ablo.decks.create()`, the SDK assigns `order` automatically based on the position of each slide in the `slides` array. When you call `ablo.slides.create()` imperatively, you supply `order` yourself — typically set it to the current slide count so the new slide lands at the end.
+
+```typescript
+// Append a slide at position 3 (zero-indexed)
+const slide = await ablo.slides.create({
+  deckId: deck.id,
+  title: 'Appendix',
+  order: 3,
+});
+```
+
+## Slide backgrounds
+
+You set a slide's background using the `background` field in the slide spec. You can pass a raw CSS string, a hex color, or use the structured background builders exported from `@abloatai/decks`.
+
+```typescript
+import { solidBackground, gradientBackground, linearGradient, imageBackground } from '@abloatai/decks';
+
+// Hex color
+const slide1 = { title: 'Dark', background: '#0A0F1E', layers: [] };
+
+// Structured solid
+const slide2 = { title: 'Brand', background: solidBackground('#5B4CF5'), layers: [] };
+
+// Gradient
+const slide3 = {
+  title: 'Gradient',
+  background: gradientBackground(linearGradient(['#5B4CF5', '#9B8FFE'])),
+  layers: [],
+};
+
+// Image
+const slide4 = {
+  title: 'Hero',
+  background: imageBackground({ url: 'https://cdn.example.com/hero.jpg' }),
+  layers: [],
+};
+```
+
+## Slide size presets
+
+The default slide canvas is **1920 × 1080 pixels** (16:9 widescreen). You can change the size per slide using the `size` field, which accepts a preset ID.
+
+| Preset | Dimensions | Aspect ratio |
+|--------|-----------|--------------|
+| `'16:9'` *(default)* | 1920 × 1080 | 16:9 |
+| `'16:10'` | 1920 × 1200 | 16:10 |
+| `'a4-portrait'` | 2480 × 3508 | A4 portrait |
+
+```typescript
+const slide = await ablo.slides.create({
+  deckId: deck.id,
+  title: 'Print-ready slide',
+  order: 0,
+  size: 'a4-portrait',
+});
+```
+
+<Note>
+  All layer coordinates — the `x`, `y`, `w`, and `h` fields inside `at` — are expressed in **pixels within the slide's canvas dimensions**. For a standard 16:9 slide, that means `x` and `w` are in the range 0–1920 and `y` and `h` are in the range 0–1080.
+</Note>
+
+## The coordinate system
+
+Every layer is positioned using an `at` field that specifies a bounding box in slide-canvas pixels.
+
+```typescript
+at: { x: 160, y: 120, w: 1600, h: 200 }
+//   ^       ^       ^         ^
+//   left    top     width     height
+```
+
+The origin `(0, 0)` is the top-left corner of the slide. On a default 16:9 slide, a layer at `{ x: 160, y: 120, w: 1600, h: 840 }` leaves an 160 px margin on the left and right and sits 120 px from the top. You can also supply an optional `rotation` in degrees.

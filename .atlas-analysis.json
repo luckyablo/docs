@@ -1,0 +1,139 @@
+{
+  "projectType": "sdk-library",
+  "projectName": "Ablo Decks SDK",
+  "projectDescription": "A typed TypeScript SDK for building Ablo slide decks programmatically — create decks, slides, charts, tables, and themes from code via the Ablo API.",
+  "theme": "luma",
+  "primaryColor": "#5B4CF5",
+  "lightColor": "#EEF0FF",
+  "darkColor": "#2D1FA3",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "authentication"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/decks-and-slides",
+              "concepts/layers",
+              "concepts/themes-and-layouts"
+            ]
+          },
+          {
+            "group": "Layers",
+            "pages": [
+              "layers/text",
+              "layers/charts",
+              "layers/tables",
+              "layers/images-and-shapes"
+            ]
+          },
+          {
+            "group": "Styling",
+            "pages": [
+              "styling/fills",
+              "styling/effects",
+              "styling/themes"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/batch-operations",
+              "guides/layouts-and-templates",
+              "guides/image-uploads",
+              "guides/incremental-updates"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Resources",
+            "pages": [
+              "api/decks",
+              "api/slides",
+              "api/layers",
+              "api/layouts",
+              "api/themes",
+              "api/images"
+            ]
+          },
+          {
+            "group": "Types",
+            "pages": [
+              "api/types",
+              "api/layer-input",
+              "api/fills-reference"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Declarative deck creation — build entire deck/slide/layer trees in one atomic commit",
+    "10 layer types: text, bullets, numbered, bar chart, donut chart, chart, table, image, shape, icon",
+    "Full chart support: bar, stacked-bar, line, combo, pie, donut, waterfall, funnel, scatter, bubble, mekko, gantt, range",
+    "Structured table authoring with per-cell styling, spans, and alternating row styles",
+    "Fill builders: solid, linear gradient, radial gradient, mesh gradient, image fill, animated WebGL shader",
+    "Structured theme authoring with fonts and color tokens",
+    "Reusable layout templates with named placeholder slots",
+    "Image upload to hosted CDN storage",
+    "Typed Zod-validated API surface — all options are discoverable enums",
+    "Imperative batch builder for multi-slide, multi-layer atomic commits"
+  ],
+  "publicApiSurface": [
+    "new Decks(apiKey)",
+    "ablo.decks.create(input)",
+    "ablo.decks.retrieve(id)",
+    "ablo.decks.update(params)",
+    "ablo.decks.delete(id)",
+    "ablo.slides.create(input)",
+    "ablo.slides.retrieve(id)",
+    "ablo.slides.list({ deckId })",
+    "ablo.slides.update(params)",
+    "ablo.slides.delete(id)",
+    "ablo.layers.create(slideId, layer)",
+    "ablo.layers.update(params)",
+    "ablo.layers.applyOp(id, op)",
+    "ablo.layers.delete(id)",
+    "ablo.layouts.create(params)",
+    "ablo.layouts.createSlide(layout, params)",
+    "ablo.layouts.addLayer(slideLayoutId, layer)",
+    "ablo.layouts.delete(id)",
+    "ablo.themes.create(params)",
+    "ablo.themes.update(params)",
+    "ablo.themes.delete(id)",
+    "ablo.images.upload({ bytes, contentType })",
+    "text(value, options?)",
+    "bullets(items, options?)",
+    "numbered(items, options?)",
+    "barChart(input)",
+    "donutChart(input)",
+    "chart(document)",
+    "table(input)",
+    "image(input)",
+    "shape(input)",
+    "icon(input)",
+    "solidFill(color, opacity?)",
+    "linearGradient(stops, opts?)",
+    "radialGradient(stops, opts?)",
+    "meshGradient(points, opts?)",
+    "imageFill(url, opts?)",
+    "shaderFill(input, opacity?)",
+    "shadow(params)",
+    "colorRef(token)",
+    "buildThemeCss(spec)"
+  ]
+}

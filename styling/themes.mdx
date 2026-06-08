@@ -1,0 +1,263 @@
+---
+title: "Themes — Brand Colors, Fonts, and CSS Variables"
+sidebarTitle: "Themes"
+description: "Create and apply programmatic themes to control every deck's color palette, font families, and typography scale through structured CSS variable injection."
+---
+
+Themes give you control over the visual identity of every deck in your workspace. A theme is a `:root` block of `--slide-*` CSS variables that the Ablo renderer reads to paint colors, choose fonts, and scale typography. You can author a theme as a structured spec — a `colors` + `fonts` object — and the SDK compiles it to the canonical CSS that byte-matches a theme created in the editor. You can also pass raw CSS directly when you need precise control. Once created, a theme can be set as the workspace default or atomically applied to a specific deck in a single API call.
+
+---
+
+## Creating a theme
+
+Call `ablo.themes.create()` with a `name` and either a structured spec (`colors` + `fonts`) or a raw `css` string. The method returns the saved theme object, including its `id`.
+
+<ParamField path="name" type="string" required>
+  A human-readable label shown in the Ablo editor's theme picker.
+</ParamField>
+
+<ParamField path="colors" type="ThemeColors">
+  The seven color slots that define the palette. All values are CSS color strings.
+</ParamField>
+
+<ParamField path="fonts" type="ThemeFonts">
+  `{ heading, body }` — font family names. Use values from `FONT_FAMILIES` exported by `@abloatai/decks` to stay within the supported set.
+</ParamField>
+
+<ParamField path="default" type="boolean">
+  When `true`, this theme becomes the workspace default applied to all new decks.
+</ParamField>
+
+<ParamField path="applyTo" type="string">
+  A deck `id`. When provided, the theme is applied to that deck atomically as part of the create call — no separate update step needed.
+</ParamField>
+
+```typescript
+import { Decks } from '@abloatai/decks';
+
+const ablo = new Decks(process.env.ABLO_API_KEY);
+
+const theme = await ablo.themes.create({
+  name: 'Acme Brand',
+  colors: {
+    brand:      '#0066CC',
+    brandLight: '#E5F0FF',
+    textColor:  '#1A1A2E',
+    textMuted:  '#6B7280',
+    surface:    '#FFFFFF',
+    card:       '#F8FAFC',
+    border:     '#E2E8F0',
+  },
+  fonts: { heading: 'Inter', body: 'Inter' },
+  applyTo: deck.id,
+});
+
+console.log('Theme created:', theme.id);
+```
+
+### Color slots
+
+The `colors` object has exactly seven required keys. Every key maps directly to a `--slide-*` CSS variable the renderer reads.
+
+<CardGroup cols={2}>
+  <Card title="brand" icon="palette">
+    Primary accent color. Used for CTAs, highlights, and interactive elements.
+    Maps to `--slide-brand`.
+  </Card>
+  <Card title="brandLight" icon="sun">
+    Lighter tint of the brand color. Used for backgrounds behind brand-colored elements.
+    Maps to `--slide-brand-light`.
+  </Card>
+  <Card title="textColor" icon="font">
+    Main body text color. Maps to `--slide-text-color`.
+  </Card>
+  <Card title="textMuted" icon="text-slash">
+    Secondary/muted text. Used for captions, labels, and supporting copy.
+    Maps to `--slide-text-muted`.
+  </Card>
+  <Card title="surface" icon="square">
+    Slide canvas background color. Maps to `--slide-surface`.
+  </Card>
+  <Card title="card" icon="rectangle-history">
+    Card and panel background. Maps to `--slide-card`.
+  </Card>
+  <Card title="border" icon="border-all">
+    Border and divider color. Maps to `--slide-border`.
+  </Card>
+</CardGroup>
+
+---
+
+## Raw CSS themes
+
+When you need control beyond the structured spec — custom typography overrides, additional variables, or a pre-existing CSS block — pass a `css` string directly instead of `colors` and `fonts`. The string must be a valid `:root { --slide-* }` block.
+
+```typescript
+const theme = await ablo.themes.create({
+  name: 'Hand-crafted Dark',
+  css: `
+    :root {
+      --slide-font-heading: Playfair Display;
+      --slide-font-body:    Source Sans Pro;
+      --slide-brand:        #F5C542;
+      --slide-brand-light:  #FFF8DC;
+      --slide-text-color:   #F0EDE8;
+      --slide-text-muted:   #9C9690;
+      --slide-surface:      #1A1714;
+      --slide-card:         #252119;
+      --slide-border:       #3D3930;
+    }
+  `,
+});
+```
+
+### Inspecting compiled CSS
+
+You can call `buildThemeCss()` to preview the CSS the SDK produces from a structured spec before sending it to the API. This is useful for debugging, seeding scripts, or understanding exactly what variables a structured theme sets.
+
+```typescript
+import { buildThemeCss } from '@abloatai/decks';
+
+const css = buildThemeCss({
+  colors: {
+    brand:      '#0066CC',
+    brandLight: '#E5F0FF',
+    textColor:  '#1A1A2E',
+    textMuted:  '#6B7280',
+    surface:    '#FFFFFF',
+    card:       '#F8FAFC',
+    border:     '#E2E8F0',
+  },
+  fonts: { heading: 'Inter', body: 'Inter' },
+});
+
+console.log(css);
+// :root {
+//   --slide-font-heading: Inter;
+//   --slide-font-body: Inter;
+//   --slide-text-title: 72px;
+//   ...
+// }
+```
+
+---
+
+## Using theme color tokens in layers
+
+Rather than hard-coding `'var(--slide-brand)'` throughout your layer definitions, use `colorRef()` to resolve a token name to the correct CSS variable reference. The compiler validates the token name and your editor will autocomplete the available options.
+
+```typescript
+import { colorRef, solidFill, text, shape } from '@abloatai/decks';
+
+// A brand-colored heading
+text('Our Mission', { style: 'h1', color: colorRef('brand') }, {
+  at: { x: 160, y: 120, w: 1600, h: 160 },
+})
+
+// A card shape using theme surface and border tokens
+shape({
+  shape: 'rectangle',
+  fills: [solidFill(colorRef('card'))],
+  at: { x: 200, y: 320, w: 740, h: 400 },
+})
+```
+
+The available color tokens and their CSS variables are:
+
+| Token | CSS Variable |
+|---|---|
+| `'brand'` | `--slide-brand` |
+| `'brandLight'` | `--slide-brand-light` |
+| `'text'` | `--slide-text-color` |
+| `'textMuted'` | `--slide-text-muted` |
+| `'surface'` | `--slide-surface` |
+| `'card'` | `--slide-card` |
+| `'border'` | `--slide-border` |
+
+---
+
+## Theme CSS variables reference
+
+A structured theme compiles to a full `:root` block covering fonts, a complete typography scale, and all seven color slots. Here is the complete variable set the renderer reads.
+
+<Tabs>
+  <Tab title="Fonts">
+    | Variable | Description |
+    |---|---|
+    | `--slide-font-heading` | Font family for heading styles (`title`, `h1`–`h3`) |
+    | `--slide-font-body` | Font family for body, body2, small, and caption styles |
+  </Tab>
+
+  <Tab title="Typography scale">
+    | Variable | Size | Weight | Line height |
+    |---|---|---|---|
+    | `--slide-text-title` | 72 px | 700 | 1.1 |
+    | `--slide-text-h1` | 48 px | 700 | 1.2 |
+    | `--slide-text-h2` | 36 px | 600 | 1.25 |
+    | `--slide-text-h3` | 28 px | 600 | 1.3 |
+    | `--slide-text-body` | 24 px | 400 | 1.5 |
+    | `--slide-text-body2` | 22 px | 400 | 1.5 |
+    | `--slide-text-small` | 18 px | 400 | 1.4 |
+    | `--slide-text-caption` | 14 px | 400 | 1.4 |
+
+    Each size variable has companion `--line-height`, `--font-weight`, and `--letter-spacing` variables (e.g. `--slide-text-h1--line-height`).
+  </Tab>
+
+  <Tab title="Colors">
+    | Variable | Spec key |
+    |---|---|
+    | `--slide-brand` | `colors.brand` |
+    | `--slide-brand-light` | `colors.brandLight` |
+    | `--slide-text-color` | `colors.textColor` |
+    | `--slide-text-muted` | `colors.textMuted` |
+    | `--slide-surface` | `colors.surface` |
+    | `--slide-card` | `colors.card` |
+    | `--slide-border` | `colors.border` |
+  </Tab>
+</Tabs>
+
+---
+
+## Updating and deleting themes
+
+Use `ablo.themes.update()` to rename a theme or replace its CSS. Use `ablo.themes.delete()` to remove a theme permanently.
+
+<Steps>
+  <Step title="Update a theme">
+    Pass the theme `id` and any fields you want to change. Unspecified fields are left untouched.
+
+    ```typescript
+    await ablo.themes.update({
+      id: theme.id,
+      name: 'Acme Brand v2',
+      css: buildThemeCss({
+        colors: {
+          brand:      '#003D99',   // Darker blue
+          brandLight: '#D6E8FF',
+          textColor:  '#1A1A2E',
+          textMuted:  '#6B7280',
+          surface:    '#FFFFFF',
+          card:       '#F8FAFC',
+          border:     '#E2E8F0',
+        },
+        fonts: { heading: 'Inter', body: 'Inter' },
+      }),
+    });
+    ```
+  </Step>
+
+  <Step title="Delete a theme">
+    Deleting a theme does not affect decks that already have the theme's CSS applied — those
+    variables are stored on the deck itself and continue to render correctly.
+
+    ```typescript
+    await ablo.themes.delete(theme.id);
+    ```
+  </Step>
+</Steps>
+
+<Warning>
+  Font family names must come from the `FONT_FAMILIES` list exported by `@abloatai/decks`.
+  Passing an unsupported font name will cause the renderer to fall back to the system font.
+  Use `import { FONT_FAMILIES } from '@abloatai/decks'` to enumerate valid options.
+</Warning>

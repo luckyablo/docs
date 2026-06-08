@@ -1,0 +1,392 @@
+---
+title: "Chart Layers: Bar, Donut, Line & All Chart Families"
+sidebarTitle: "Charts"
+description: "Add bar charts, donut charts, line charts, waterfall, scatter, and more to your slides using the barChart(), donutChart(), and chart() builders."
+---
+
+Charts are first-class citizens in the Decks SDK. Every chart renders live from structured data — the same chart documents the Ablo editor produces, validated through the same schema, so what you build in code looks identical to what you'd create in the UI. The SDK offers three levels of abstraction: shorthand `bar` and `donut` layer types for the most common single-series cases, the `chart()` builder for any family with full control over datasets, marks, encodings, axes, and affordances, and `chartFromDocument()` as an escape hatch for pre-built chart documents.
+
+All charts are placed on a slide using `at` coordinates in the 1920×1080 slide space. A good default size for a half-width chart is `{ x: 160, y: 260, w: 760, h: 580 }` and for a full-width chart `{ x: 160, y: 260, w: 1600, h: 650 }`.
+
+---
+
+## Bar charts
+
+The `bar` shorthand renders a single-series vertical or horizontal bar chart. It accepts a flat array of `ChartDatum` objects and a handful of display options — the SDK builds the full chart document internally.
+
+### ChartDatum
+
+Each bar is one datum object:
+
+<ParamField body="label" type="string" required>
+  Category label displayed on the axis.
+</ParamField>
+
+<ParamField body="value" type="number" required>
+  The bar's numeric value.
+</ParamField>
+
+<ParamField body="color" type="string">
+  Optional per-bar color override as a CSS color string. When omitted, the chart uses the deck's palette cycling.
+</ParamField>
+
+<ParamField body="id" type="string">
+  Optional stable row id. Useful when you later apply chart operations (update-cell, set-series-color) that reference rows by id.
+</ParamField>
+
+### Inline syntax
+
+```typescript
+const layer = {
+  type: 'bar' as const,
+  data: [
+    { label: 'Q1', value: 1200 },
+    { label: 'Q2', value: 1850 },
+    { label: 'Q3', value: 1620 },
+    { label: 'Q4', value: 2100 },
+  ],
+  title: 'Quarterly Revenue ($K)',
+  dataLabels: true,
+  at: { x: 160, y: 300, w: 1600, h: 650 },
+};
+```
+
+### Builder function syntax
+
+```typescript
+import { barChart } from '@abloatai/decks';
+
+const layer = barChart({
+  data: [
+    { label: 'Q1', value: 1200 },
+    { label: 'Q2', value: 1850 },
+    { label: 'Q3', value: 1620 },
+    { label: 'Q4', value: 2100 },
+  ],
+  title: 'Quarterly Revenue ($K)',
+  valueFormat: '$,.0f',
+  dataLabels: true,
+});
+```
+
+### Bar chart options
+
+<ParamField body="data" type="ChartDatum[]" required>
+  Array of data points. Must contain at least one item.
+</ParamField>
+
+<ParamField body="title" type="string">
+  Chart title rendered above the plot area.
+</ParamField>
+
+<ParamField body="orientation" type="'vertical' | 'horizontal'">
+  Bar orientation. `'vertical'` (default) draws bars top-to-bottom with categories on the x-axis. `'horizontal'` draws bars left-to-right with categories on the y-axis.
+</ParamField>
+
+<ParamField body="valueFormat" type="string">
+  A d3-format string controlling how values appear on axis ticks and data labels. Examples: `'$,.0f'` → $1,234; `'.1%'` → 12.3%; `',.2f'` → 1,234.56.
+</ParamField>
+
+<ParamField body="dataLabels" type="boolean">
+  When `true`, renders a value label on each bar.
+</ParamField>
+
+<ParamField body="cagrArrow" type="boolean">
+  When `true`, adds a CAGR arrow spanning from the first bar to the last, showing the compound annual growth rate. Common in financial slides.
+</ParamField>
+
+### Horizontal bar example
+
+```typescript
+import { barChart } from '@abloatai/decks';
+
+const layer = barChart({
+  data: [
+    { label: 'North America', value: 42, color: 'var(--slide-brand)' },
+    { label: 'Europe', value: 31 },
+    { label: 'Asia Pacific', value: 18 },
+    { label: 'Rest of World', value: 9 },
+  ],
+  title: 'Revenue by Region (%)',
+  orientation: 'horizontal',
+  valueFormat: '.0f',
+  dataLabels: true,
+});
+```
+
+---
+
+## Donut charts
+
+The `donut` shorthand renders a donut (ring) chart. Each `ChartDatum` becomes one arc slice. Use this for part-to-whole compositions like market share, segment breakdowns, or budget allocations.
+
+### Inline syntax
+
+```typescript
+const layer = {
+  type: 'donut' as const,
+  data: [
+    { label: 'Enterprise', value: 58, color: '#5B4CF5' },
+    { label: 'Mid-Market', value: 27, color: '#818CF8' },
+    { label: 'SMB', value: 15, color: '#C4B5FD' },
+  ],
+  title: 'Revenue by Segment',
+  dataLabels: true,
+  at: { x: 580, y: 260, w: 760, h: 560 },
+};
+```
+
+### Builder function syntax
+
+```typescript
+import { donutChart } from '@abloatai/decks';
+
+const layer = donutChart({
+  data: [
+    { label: 'Enterprise', value: 58, color: '#5B4CF5' },
+    { label: 'Mid-Market', value: 27, color: '#818CF8' },
+    { label: 'SMB', value: 15, color: '#C4B5FD' },
+  ],
+  title: 'Revenue by Segment',
+  valueFormat: '.0%',
+  dataLabels: true,
+});
+```
+
+### Donut chart options
+
+<ParamField body="data" type="ChartDatum[]" required>
+  Array of slice data. Each item maps to one arc segment. Must contain at least one item.
+</ParamField>
+
+<ParamField body="title" type="string">
+  Chart title rendered above or inside the donut.
+</ParamField>
+
+<ParamField body="valueFormat" type="string">
+  d3-format string for slice labels and tooltips. Use `'.0%'` to show percentages.
+</ParamField>
+
+<ParamField body="dataLabels" type="boolean">
+  When `true`, renders a label on each slice showing its value or percentage.
+</ParamField>
+
+---
+
+## Full chart builder
+
+When you need multi-series data, secondary axes, custom mark styling, affordances (CAGR arrows, trendlines, annotations), or any chart family beyond bar and donut, use the `chart()` builder with a `CreateChartDocumentInput`. This is the same structure the Ablo editor persists — every feature available in the UI is accessible here.
+
+The full chart uses a grammar-of-graphics model: you define a `dataset` (columns + rows), one or more `marks` that reference that dataset, channel `encode` bindings that map columns to visual properties, and optional `guides` (axes, scales, legend) and `affordances` (labels, annotations, trend lines).
+
+### chart() builder
+
+```typescript
+import { chart } from '@abloatai/decks';
+
+const layer = chart({
+  family: 'bar',
+  dataset: {
+    id: 'revenue',
+    rowIdField: 'id',
+    columns: [
+      { key: 'id', type: 'string' },
+      { key: 'quarter', label: 'Quarter', type: 'category', role: 'category' },
+      { key: 'revenue', label: 'Revenue', type: 'number', role: 'value', format: '$,.0f' },
+    ],
+    rows: [
+      { id: 'q1', quarter: 'Q1', revenue: 1200 },
+      { id: 'q2', quarter: 'Q2', revenue: 1850 },
+      { id: 'q3', quarter: 'Q3', revenue: 1620 },
+      { id: 'q4', quarter: 'Q4', revenue: 2100 },
+    ],
+  },
+  marks: [
+    {
+      id: 'bars',
+      type: 'bar',
+      from: 'revenue',
+      encode: {
+        x: { type: 'field', field: 'quarter', valueType: 'category' },
+        y: { type: 'field', field: 'revenue', valueType: 'number' },
+      },
+    },
+  ],
+});
+```
+
+### Supported chart families
+
+The `family` field on a chart document determines the chart type. Every family maps to specific mark types and required encoding channels.
+
+<CardGroup cols={3}>
+  <Card title="bar" icon="chart-bar">
+    Vertical or horizontal bars. Marks: `bar`. Channels: `{x, y}`.
+  </Card>
+  <Card title="stacked-bar" icon="chart-bar">
+    Stacked segments per category. Marks: `bar`. Channels: `{x, y, color}`.
+  </Card>
+  <Card title="line" icon="chart-line">
+    Connected series over categories. Marks: `line`. Channels: `{x, y}`.
+  </Card>
+  <Card title="combo" icon="chart-mixed">
+    Bars + line on shared or secondary axis. Two marks: `bar` + `line`.
+  </Card>
+  <Card title="pie" icon="chart-pie">
+    Full-circle segments. Marks: `arc`. Channels: `{label, angle}`.
+  </Card>
+  <Card title="donut" icon="circle-dashed">
+    Ring segments. Marks: `arc`. Channels: `{label, angle}`.
+  </Card>
+  <Card title="waterfall" icon="chart-waterfall">
+    Running totals with incremental bars. Marks: `bar` with waterfall transform.
+  </Card>
+  <Card title="funnel" icon="filter">
+    Narrowing stages for conversion flows. Marks: `bar`.
+  </Card>
+  <Card title="scatter" icon="scatter-chart">
+    XY point plot. Marks: `point`. Channels: `{x, y}`.
+  </Card>
+  <Card title="bubble" icon="circle">
+    XY points sized by a third metric. Marks: `point`. Channels: `{x, y, size}`.
+  </Card>
+  <Card title="mekko" icon="table-cells">
+    Variable-width stacked bars. Channels: `{x, y, width}`.
+  </Card>
+  <Card title="gantt" icon="calendar">
+    Task timelines with start/end dates. Marks: `task`.
+  </Card>
+  <Card title="range" icon="arrows-left-right">
+    Min-max bands. Marks: `area` or `range`.
+  </Card>
+</CardGroup>
+
+<Note>
+  For `pie` and `donut` families, use `{label, angle}` channel bindings — **not** `{x, y}`. The renderer produces an empty SVG when the wrong channels are set. The `bar`, `line`, `scatter`, and `combo` families all require `{x, y}` bindings.
+</Note>
+
+### Line chart example
+
+```typescript
+import { chart } from '@abloatai/decks';
+
+const layer = {
+  type: 'chart' as const,
+  document: {
+    family: 'line',
+    dataset: {
+      id: 'revenue-trend',
+      rowIdField: 'id',
+      columns: [
+        { key: 'id', type: 'string' },
+        { key: 'period', label: 'Period', type: 'category', role: 'category' },
+        { key: 'revenue', label: 'Revenue ($M)', type: 'number', role: 'value', format: '$,.1f' },
+        { key: 'target', label: 'Target ($M)', type: 'number', role: 'series', format: '$,.1f' },
+      ],
+      rows: [
+        { id: 'r0', period: 'Q1', revenue: 100, target: 95 },
+        { id: 'r1', period: 'Q2', revenue: 145, target: 120 },
+        { id: 'r2', period: 'Q3', revenue: 132, target: 140 },
+        { id: 'r3', period: 'Q4', revenue: 178, target: 160 },
+      ],
+    },
+    marks: [
+      {
+        id: 'revenue-line',
+        type: 'line',
+        from: 'revenue-trend',
+        encode: {
+          x: { type: 'field', field: 'period', valueType: 'category' },
+          y: { type: 'field', field: 'revenue', valueType: 'number' },
+        },
+        style: { stroke: 'var(--slide-brand)', strokeWidth: 3 },
+      },
+      {
+        id: 'target-line',
+        type: 'line',
+        from: 'revenue-trend',
+        encode: {
+          x: { type: 'field', field: 'period', valueType: 'category' },
+          y: { type: 'field', field: 'target', valueType: 'number' },
+        },
+        style: { stroke: '#9ca3af', strokeWidth: 2, lineDash: [4, 4] },
+      },
+    ],
+    guides: {
+      axes: [
+        { id: 'x-axis', channel: 'x', show: true },
+        { id: 'y-axis', channel: 'y', show: true, grid: true },
+      ],
+      legend: { show: true, position: 'top-right' },
+    },
+  },
+  at: { x: 160, y: 300, w: 1600, h: 650 },
+};
+```
+
+### Multi-series bar chart with data labels
+
+```typescript
+import { chart } from '@abloatai/decks';
+
+const layer = chart({
+  family: 'stacked-bar',
+  dataset: {
+    id: 'costs',
+    rowIdField: 'id',
+    columns: [
+      { key: 'id', type: 'string' },
+      { key: 'year', label: 'Year', type: 'category', role: 'category' },
+      { key: 'cogs', label: 'COGS', type: 'number', role: 'value', format: '$,.0f' },
+      { key: 'opex', label: 'OpEx', type: 'number', role: 'series', format: '$,.0f' },
+      { key: 'rd', label: 'R&D', type: 'number', role: 'series', format: '$,.0f' },
+    ],
+    rows: [
+      { id: 'y21', year: 'FY21', cogs: 420, opex: 180, rd: 90 },
+      { id: 'y22', year: 'FY22', cogs: 510, opex: 210, rd: 120 },
+      { id: 'y23', year: 'FY23', cogs: 580, opex: 250, rd: 155 },
+    ],
+  },
+  marks: [
+    {
+      id: 'bars',
+      type: 'bar',
+      from: 'costs',
+      encode: {
+        x: { type: 'field', field: 'year', valueType: 'category' },
+        y: { type: 'field', field: 'cogs', valueType: 'number' },
+      },
+    },
+  ],
+  affordances: [
+    {
+      id: 'labels',
+      type: 'data-labels',
+      position: 'inside',
+      format: '$,.0f',
+    },
+    {
+      id: 'totals',
+      type: 'total-labels',
+      position: 'above',
+      format: '$,.0f',
+    },
+  ],
+});
+```
+
+### chartFromDocument()
+
+Use `chartFromDocument()` when you already have a fully-built `ChartDocument` — for example, from a prior API response, a stored chart template, or `parseChartDocument()` from the charts toolkit. It validates the document and wraps it for placement.
+
+```typescript
+import { chartFromDocument } from '@abloatai/decks';
+import { parseChartDocument } from '@abloatai/decks'; // re-exported from charts toolkit
+
+const existingDoc = parseChartDocument(storedChartJson);
+const layer = chartFromDocument(existingDoc);
+```
+
+<Warning>
+  `chartFromDocument()` throws if the input fails the `ChartDocument` schema check. Build your documents with `createChartDocument()` or `parseChartDocument()` from the charts toolkit to guarantee they pass validation.
+</Warning>

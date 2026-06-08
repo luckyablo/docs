@@ -1,0 +1,91 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "name": "Ablo Decks",
+  "theme": "luma",
+  "colors": {
+    "primary": "#5B4CF5",
+    "light": "#EEF0FF",
+    "dark": "#2D1FA3"
+  },
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "authentication"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/decks-and-slides",
+              "concepts/layers",
+              "concepts/themes-and-layouts"
+            ]
+          },
+          {
+            "group": "Layers",
+            "pages": [
+              "layers/text",
+              "layers/charts",
+              "layers/tables",
+              "layers/images-and-shapes"
+            ]
+          },
+          {
+            "group": "Styling",
+            "pages": [
+              "styling/fills",
+              "styling/effects",
+              "styling/themes"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/batch-operations",
+              "guides/layouts-and-templates",
+              "guides/image-uploads",
+              "guides/incremental-updates"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Resources",
+            "pages": [
+              "api/decks",
+              "api/slides",
+              "api/layers",
+              "api/layouts",
+              "api/themes",
+              "api/images"
+            ]
+          },
+          {
+            "group": "Types",
+            "pages": [
+              "api/types",
+              "api/layer-input",
+              "api/fills-reference"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "navbar": {
+    "primary": {
+      "type": "github",
+      "href": "https://github.com/Abloatai/decks"
+    }
+  }
+}

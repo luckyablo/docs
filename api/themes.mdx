@@ -1,0 +1,225 @@
+---
+title: "Themes API — Deck Fonts, Colors, and Slide Typography"
+sidebarTitle: "Themes"
+description: "Create and manage CSS-variable themes that control fonts, colors, and typography scale across every slide in a deck, using structured tokens or raw CSS."
+---
+
+Themes control the visual identity of a deck through CSS custom properties — the `--slide-*` variable set that every slide renderer reads at render time. You can author a theme in two ways: pass a structured `colors` + `fonts` object and let the SDK compile the full `:root` block for you, or provide a raw `css` string for complete control. A theme can be applied to a deck atomically at creation time, or you can associate it later via `decks.update`.
+
+---
+
+## `ablo.themes.create(params, options?)` → `ThemeResource`
+
+Creates a new theme. You must supply either `css` **or** both `colors` and `fonts` — the call throws if neither path is satisfied.
+
+<ParamField path="params.name" type="string" required>
+  Display name for the theme, shown in the editor's theme picker.
+</ParamField>
+
+<ParamField path="params.css" type="string">
+  A raw `:root { --slide-* }` CSS block. Provide this **or** `colors` + `fonts`, not both. Use this path when you need exact control over every variable, including typography scale overrides.
+</ParamField>
+
+<ParamField path="params.colors" type="ThemeColors">
+  Structured color tokens. The SDK compiles these into the full CSS variable set, with typography defaults baked in. Required when using the structured path.
+
+  <Expandable title="ThemeColors fields">
+    <ParamField path="brand" type="string" required>
+      Primary brand color — maps to `--slide-brand`. Used for chart fill defaults, accent shapes, and active UI states.
+    </ParamField>
+    <ParamField path="brandLight" type="string" required>
+      Lighter brand tint — maps to `--slide-brand-light`. Used for hover states and secondary accents.
+    </ParamField>
+    <ParamField path="textColor" type="string" required>
+      Primary text color — maps to `--slide-text-color`. Applied to `body1`, `body2`, `h1`–`h3` styles.
+    </ParamField>
+    <ParamField path="textMuted" type="string" required>
+      Muted/secondary text — maps to `--slide-text-muted`. Applied to `note` and `caption` styles.
+    </ParamField>
+    <ParamField path="surface" type="string" required>
+      Slide background surface — maps to `--slide-surface`.
+    </ParamField>
+    <ParamField path="card" type="string" required>
+      Card/panel background — maps to `--slide-card`.
+    </ParamField>
+    <ParamField path="border" type="string" required>
+      Border and divider color — maps to `--slide-border`.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField path="params.fonts" type="ThemeFonts">
+  Structured font tokens. Required when using the structured path alongside `colors`.
+
+  <Expandable title="ThemeFonts fields">
+    <ParamField path="heading" type="string" required>
+      Font family for heading styles (`title`, `h1`–`h3`) — maps to `--slide-font-heading`. Must be a Google Fonts family name or a system font.
+    </ParamField>
+    <ParamField path="body" type="string" required>
+      Font family for body styles (`body1`, `body2`, `note`, `caption`) — maps to `--slide-font-body`.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField path="params.default" type="boolean">
+  When `true`, marks this theme as the workspace default — new decks that don't specify a `themeId` inherit it.
+</ParamField>
+
+<ParamField path="params.applyTo" type="string">
+  A deck id. When provided, the theme is applied to that deck in the same atomic commit as the theme creation. Useful when you create a theme and immediately want it active on a specific deck.
+</ParamField>
+
+<ParamField path="options" type="RequestOptions">
+  Per-call commit controls. See [RequestOptions](/api/types#requestoptions).
+</ParamField>
+
+**Returns `ThemeResource`**
+
+<ResponseField name="id" type="string">
+  The theme's id. Store this to apply the theme to decks or update it later.
+</ResponseField>
+
+<ResponseField name="name" type="string">
+  The name you provided.
+</ResponseField>
+
+---
+
+## `ablo.themes.update(params, options?)` → `CommitReceipt`
+
+Updates a theme's name, CSS, or both. Changes take effect immediately for all decks using the theme.
+
+<ParamField path="params.id" type="string" required>
+  The theme to update.
+</ParamField>
+
+<ParamField path="params.name" type="string">
+  New display name for the theme.
+</ParamField>
+
+<ParamField path="params.css" type="string">
+  Replacement `:root` CSS block. The entire CSS is replaced — this is not a merge. If you want to update individual variables, read the existing theme first and patch the relevant lines.
+</ParamField>
+
+<ParamField path="options" type="RequestOptions">
+  Per-call commit controls.
+</ParamField>
+
+---
+
+## `ablo.themes.delete(id, options?)` → `CommitReceipt`
+
+Deletes a theme. Decks that reference this theme will fall back to the workspace default.
+
+<ParamField path="id" type="string" required>
+  The theme id to delete.
+</ParamField>
+
+<ParamField path="options" type="RequestOptions">
+  Per-call commit controls.
+</ParamField>
+
+---
+
+## Examples
+
+### Structured colors + fonts
+
+The structured path is the most common. Pass `colors` and `fonts`; the SDK compiles a complete `:root` block including typography scale, line-height, font-weight, and letter-spacing defaults.
+
+```typescript
+import Decks from '@abloatai/decks';
+
+const ablo = new Decks(process.env.ABLO_API_KEY!);
+
+const theme = await ablo.themes.create({
+  name: 'Midnight Blue',
+  colors: {
+    brand:      '#3B82F6',
+    brandLight: '#BFDBFE',
+    textColor:  '#F1F5F9',
+    textMuted:  '#94A3B8',
+    surface:    '#0F172A',
+    card:       '#1E293B',
+    border:     '#334155',
+  },
+  fonts: {
+    heading: 'Inter',
+    body:    'Inter',
+  },
+  default: true,          // make this the workspace default
+});
+
+console.log('Theme id:', theme.id);
+```
+
+### Structured theme applied atomically to a deck
+
+Create the theme and link it to an existing deck in one commit.
+
+```typescript
+const deck = await ablo.decks.create({ title: 'Annual Review' });
+
+const theme = await ablo.themes.create({
+  name: 'Annual Review Theme',
+  colors: {
+    brand:      '#7C3AED',
+    brandLight: '#DDD6FE',
+    textColor:  '#1E1B4B',
+    textMuted:  '#6B7280',
+    surface:    '#FAFAF9',
+    card:       '#FFFFFF',
+    border:     '#E5E7EB',
+  },
+  fonts: {
+    heading: 'Playfair Display',
+    body:    'Source Sans Pro',
+  },
+  applyTo: deck.id,       // applied atomically with theme creation
+});
+```
+
+### Raw CSS approach
+
+Use the `css` path when you need precise control — custom typography scale, additional variables, or brand-specific overrides not covered by the structured fields.
+
+```typescript
+const theme = await ablo.themes.create({
+  name: 'Custom Brand',
+  css: `
+    :root {
+      --slide-font-heading: "GT Walsheim", sans-serif;
+      --slide-font-body: "Inter", sans-serif;
+
+      --slide-brand:       #E63946;
+      --slide-brand-light: #FFBCBC;
+      --slide-text-color:  #1A1A2E;
+      --slide-text-muted:  #6B6B80;
+      --slide-surface:     #FEFEFE;
+      --slide-card:        #FFFFFF;
+      --slide-border:      #ECECEC;
+
+      /* Override the default title scale */
+      --slide-text-title:   80px;
+      --slide-text-h1:      52px;
+      --slide-text-body:    26px;
+    }
+  `,
+});
+```
+
+### Update a theme's brand color
+
+```typescript
+// Bump the brand color for a rebranding — replaces the full CSS block.
+await ablo.themes.update({
+  id: theme.id,
+  css: updatedCssBlock,
+});
+
+// Or just rename it.
+await ablo.themes.update({
+  id: theme.id,
+  name: 'Midnight Blue 2.0',
+});
+```

@@ -1,0 +1,361 @@
+---
+title: "Slides API — Create, List, Update & Delete Slides"
+sidebarTitle: "Slides"
+description: "Add, retrieve, list, update, and delete slides within a deck. Create a slide along with its full layer tree in a single atomic commit."
+---
+
+The `ablo.slides` namespace manages individual slides within a deck. Like the decks API, `create` is atomic — you can pass the entire layer tree in one call and the commit either succeeds in full or is rolled back. Slide ids are client-minted, so you can capture them immediately and reference layers by id in subsequent update calls without additional read round-trips.
+
+---
+
+## `ablo.slides.create(input, options?)`
+
+Creates a slide and, optionally, all of its layers in one atomic commit.
+
+### Parameters
+
+<ParamField body="input" type="CreateSlideInput" required>
+  <Expandable title="input fields">
+    <ParamField body="deckId" type="string" required>
+      The id of the parent deck.
+    </ParamField>
+
+    <ParamField body="order" type="number" required>
+      Integer position of the slide within the deck. For a deck that already has `n` slides, pass `n` to append.
+    </ParamField>
+
+    <ParamField body="title" type="string" optional>
+      Human-readable slide title. Defaults to `"Untitled"` when omitted.
+    </ParamField>
+
+    <ParamField body="templateId" type="string" optional>
+      `SlideLayout` id. Attaches a layout template so the slide inherits the layout's chrome and placeholder slots.
+    </ParamField>
+
+    <ParamField body="layers" type="LayerInput[]" optional>
+      Flat layer descriptors to create atomically with the slide. Each object is a discriminated union on `type`. See the [Layers API](/api/layers) for the full type reference.
+    </ParamField>
+
+    <ParamField body="background" type="SlideBackgroundInput" optional>
+      Slide background — solid color, gradient, image, or raw CSS value. Use the `background` builder helpers for a typed authoring experience.
+    </ParamField>
+
+    <ParamField body="size" type="'16:9' | '16:10' | 'a4-portrait'" optional>
+      Size preset that expands to a width/height/aspectRatio triplet:
+      - `'16:9'` → 1920×1080
+      - `'16:10'` → 1920×1200
+      - `'a4-portrait'` → 2480×3508
+    </ParamField>
+
+    <ParamField body="width" type="number" optional>
+      Explicit slide width in pixels. Takes precedence over `size`.
+    </ParamField>
+
+    <ParamField body="height" type="number" optional>
+      Explicit slide height in pixels. Takes precedence over `size`.
+    </ParamField>
+
+    <ParamField body="aspectRatio" type="'16:9' | '16:10' | '4:3' | 'custom'" optional>
+      Aspect ratio constraint applied independently of the size preset.
+    </ParamField>
+
+    <ParamField body="showGrid" type="boolean" optional>
+      Show or hide the snap grid overlay in the editor.
+    </ParamField>
+
+    <ParamField body="gridSize" type="number" optional>
+      Grid cell size in pixels (used when `showGrid` is `true`).
+    </ParamField>
+
+    <ParamField body="showMasterShapes" type="boolean" optional>
+      When `false`, this slide opts out of master compositing from the parent layout's master template.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField body="options" type="RequestOptions" optional>
+  <Expandable title="options fields">
+    <ParamField body="wait" type="'queued' | 'confirmed'" optional default="confirmed">
+      `'confirmed'` (default) waits for the durable acknowledgement before resolving. `'queued'` returns as soon as the server accepts the write.
+    </ParamField>
+    <ParamField body="idempotencyKey" type="string" optional>
+      Idempotency key for safe retries.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+### Returns
+
+<ResponseField name="id" type="string">
+  Client-minted UUID for the new slide.
+</ResponseField>
+
+<ResponseField name="deckId" type="string">
+  The parent deck id.
+</ResponseField>
+
+<ResponseField name="title" type="string">
+  The slide title.
+</ResponseField>
+
+<ResponseField name="order" type="number">
+  The slide's integer position in the deck.
+</ResponseField>
+
+<ResponseField name="layers" type="LayerResource[]">
+  One entry per layer passed in `input.layers`, each carrying `{ id, slideId, type }`.
+
+  <Expandable title="LayerResource fields">
+    <ResponseField name="id" type="string">
+      Client-minted UUID for the layer.
+    </ResponseField>
+    <ResponseField name="slideId" type="string">
+      The parent slide id.
+    </ResponseField>
+    <ResponseField name="type" type="string">
+      The layer type, e.g. `"text"`, `"bar"`, `"table"`, `"image"`.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Example
+
+```typescript
+import { Decks } from '@abloatai/decks';
+
+const ablo = new Decks(process.env.ABLO_API_KEY!);
+
+const slide = await ablo.slides.create({
+  deckId: 'deck_abc123',
+  order: 0,
+  title: 'Financial Overview',
+  size: '16:9',
+  layers: [
+    {
+      type: 'text',
+      text: 'Financial Overview',
+      style: 'title',
+      at: { x: 160, y: 120, w: 1600, h: 200 },
+    },
+    {
+      type: 'table',
+      columns: ['Quarter', 'Revenue', 'Growth'],
+      rows: [
+        ['Q1', '$1.2M', '+12%'],
+        ['Q2', '$1.5M', '+25%'],
+        ['Q3', '$1.9M', '+27%'],
+      ],
+      at: { x: 160, y: 380, w: 1600, h: 500 },
+    },
+  ],
+});
+
+console.log(slide.id);                    // slide UUID
+console.log(slide.layers[1].id);          // table layer UUID
+```
+
+---
+
+## `ablo.slides.retrieve(id)`
+
+Fetches the full stored record for a slide by id. Requires a readable client.
+
+### Parameters
+
+<ParamField path="id" type="string" required>
+  The slide id.
+</ParamField>
+
+### Returns
+
+<ResponseField name="id" type="string">
+  The slide UUID.
+</ResponseField>
+
+<ResponseField name="deckId" type="string">
+  The parent deck id.
+</ResponseField>
+
+<ResponseField name="title" type="string">
+  The slide title.
+</ResponseField>
+
+<ResponseField name="order" type="number">
+  The slide's integer position in the deck.
+</ResponseField>
+
+<ResponseField name="templateId" type="string | null">
+  The attached layout template id, or `null`.
+</ResponseField>
+
+<ResponseField name="notes" type="string | null">
+  Speaker notes, or `null` if none have been set.
+</ResponseField>
+
+<ResponseField name="settings" type="SlideCompositionSettings | null">
+  The full compiled settings object (size, background, grid, etc.), or `null`.
+</ResponseField>
+
+### Example
+
+```typescript
+const slide = await ablo.slides.retrieve('slide_xyz789');
+console.log(slide.order, slide.settings?.width);
+```
+
+---
+
+## `ablo.slides.list({ deckId })`
+
+Returns all slides in a deck, ordered by their `order` field ascending. Requires a readable client.
+
+### Parameters
+
+<ParamField query="deckId" type="string" required>
+  The deck whose slides you want to list.
+</ParamField>
+
+### Returns
+
+An array of `SlideRecord` objects, sorted by `order` ascending. Each entry has the same shape as the return value of `retrieve`.
+
+### Example
+
+```typescript
+const slides = await ablo.slides.list({ deckId: 'deck_abc123' });
+
+for (const slide of slides) {
+  console.log(slide.order, slide.title);
+}
+```
+
+---
+
+## `ablo.slides.update(params, options?)`
+
+Applies a field-level patch to an existing slide. When you include any settings field (`background`, `size`, `width`, `height`, etc.), the SDK performs a read-modify-write so only the fields you specify are changed and the rest of the settings object is preserved.
+
+### Parameters
+
+<ParamField body="params" type="UpdateSlideParams" required>
+  <Expandable title="params fields">
+    <ParamField body="id" type="string" required>
+      The slide id to update.
+    </ParamField>
+    <ParamField body="title" type="string" optional>
+      New slide title.
+    </ParamField>
+    <ParamField body="notes" type="string" optional>
+      Speaker notes to store on the slide.
+    </ParamField>
+    <ParamField body="templateId" type="string" optional>
+      Attach or switch the layout template.
+    </ParamField>
+    <ParamField body="background" type="SlideBackgroundInput" optional>
+      Updated background.
+    </ParamField>
+    <ParamField body="size" type="'16:9' | '16:10' | 'a4-portrait'" optional>
+      Updated size preset.
+    </ParamField>
+    <ParamField body="width" type="number" optional>
+      Updated explicit width.
+    </ParamField>
+    <ParamField body="height" type="number" optional>
+      Updated explicit height.
+    </ParamField>
+    <ParamField body="aspectRatio" type="'16:9' | '16:10' | '4:3' | 'custom'" optional>
+      Updated aspect ratio.
+    </ParamField>
+    <ParamField body="showGrid" type="boolean" optional>
+      Toggle the grid overlay.
+    </ParamField>
+    <ParamField body="gridSize" type="number" optional>
+      Updated grid cell size.
+    </ParamField>
+    <ParamField body="showMasterShapes" type="boolean" optional>
+      Toggle master compositing for this slide.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField body="options" type="RequestOptions" optional>
+  <Expandable title="options fields">
+    <ParamField body="wait" type="'queued' | 'confirmed'" optional default="confirmed">
+      Acknowledgement level to wait for.
+    </ParamField>
+    <ParamField body="idempotencyKey" type="string" optional>
+      Idempotency key for safe retries.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+### Returns
+
+<ResponseField name="id" type="string">
+  The commit UUID.
+</ResponseField>
+
+<ResponseField name="status" type="'queued' | 'confirmed'">
+  The acknowledgement level reached.
+</ResponseField>
+
+<ResponseField name="lastSyncId" type="number" optional>
+  Monotonic sync cursor for real-time clients.
+</ResponseField>
+
+### Example
+
+```typescript
+const receipt = await ablo.slides.update({
+  id: 'slide_xyz789',
+  title: 'Financial Overview — Revised',
+  notes: 'Emphasise the Q3 growth figure.',
+  showGrid: false,
+});
+
+console.log(receipt.status); // 'confirmed'
+```
+
+---
+
+## `ablo.slides.delete(id, options?)`
+
+Permanently deletes a slide and all of its layers.
+
+### Parameters
+
+<ParamField path="id" type="string" required>
+  The slide id to delete.
+</ParamField>
+
+<ParamField body="options" type="RequestOptions" optional>
+  <Expandable title="options fields">
+    <ParamField body="wait" type="'queued' | 'confirmed'" optional default="confirmed">
+      Acknowledgement level to wait for.
+    </ParamField>
+    <ParamField body="idempotencyKey" type="string" optional>
+      Idempotency key for safe retries.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+### Returns
+
+<ResponseField name="id" type="string">
+  The commit UUID.
+</ResponseField>
+
+<ResponseField name="status" type="'queued' | 'confirmed'">
+  The acknowledgement level reached.
+</ResponseField>
+
+<ResponseField name="lastSyncId" type="number" optional>
+  Monotonic sync cursor.
+</ResponseField>
+
+### Example
+
+```typescript
+const receipt = await ablo.slides.delete('slide_xyz789');
+console.log(receipt.status); // 'confirmed'
+```

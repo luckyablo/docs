@@ -1,0 +1,361 @@
+---
+title: "Image, Shape & Icon Layers: Visual Slide Components"
+sidebarTitle: "Images & Shapes"
+description: "Add images, vector shapes, and icons to your slides with the image(), shape(), and icon() builders or their inline layer equivalents."
+---
+
+Beyond text and charts, the Decks SDK lets you place images, vector shapes, and icons anywhere on a slide. Images are rehosted automatically so any public URL works without pre-processing. Shapes give you filled and stroked vector primitives — rectangles, circles, triangles, and lines — with support for solid fills, CSS gradients, and structured fill stacks. Icons draw from the Ablo icon library using short key strings. All three layer types use the same `at` coordinate system as every other layer type.
+
+---
+
+## Images
+
+The `image()` builder and the `{ type: 'image' }` inline syntax both accept a public HTTPS URL and optional display options.
+
+### Inline syntax
+
+```typescript
+const layer = {
+  type: 'image' as const,
+  url: 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=1200',
+  objectFit: 'cover',
+  at: { x: 960, y: 80, w: 880, h: 920 },
+};
+```
+
+### Builder function syntax
+
+Pass a URL string for the simplest case, or an options object for more control:
+
+```typescript
+import { image } from '@abloatai/decks';
+
+// Shorthand — URL only, defaults to objectFit: 'cover'
+const layer = image('https://images.unsplash.com/photo-1518770660439-4636190af475?w=1200');
+
+// Options object
+const layer = image({
+  url: 'https://cdn.example.com/product-screenshot.png',
+  objectFit: 'contain',
+  width: 1200,
+  height: 800,
+});
+```
+
+### Image options
+
+<ParamField body="url" type="string" required>
+  A public HTTPS URL. External URLs are automatically rehosted to the Ablo CDN server-side when the deck is committed — you don't need to pre-process or proxy them. Must be a valid URL string.
+</ParamField>
+
+<ParamField body="objectFit" type="'cover' | 'contain' | 'fill'">
+  How the image fills its layer box. `'cover'` (default) crops to fill while preserving aspect ratio. `'contain'` letterboxes the image to fit without cropping. `'fill'` stretches the image to exactly fill the box.
+</ParamField>
+
+<ParamField body="width" type="number">
+  Intrinsic image width in pixels. Helps the renderer compute the correct crop when the intrinsic dimensions differ significantly from the layer box.
+</ParamField>
+
+<ParamField body="height" type="number">
+  Intrinsic image height in pixels.
+</ParamField>
+
+### Using local or private images
+
+External public URLs are rehosted automatically. For images that aren't publicly accessible — files on your filesystem, authenticated CDN assets, or generated images — upload them first to get a permanent Ablo CDN URL:
+
+```typescript
+import { Decks } from '@abloatai/decks';
+
+const ablo = new Decks({ apiKey: process.env.ABLO_API_KEY });
+
+// Upload a local file buffer
+const { url } = await ablo.images.upload(fs.readFileSync('./chart-export.png'), {
+  filename: 'chart-export.png',
+  contentType: 'image/png',
+});
+
+// Now use the returned CDN URL in a layer
+const layer = image(url);
+```
+
+See the [Image Uploads guide](/guides/image-uploads) for full upload options including multipart forms and presigned URLs.
+
+### Example: image with rounded shape overlay
+
+```typescript
+import { image, shape } from '@abloatai/decks';
+
+// Full-bleed background image
+const bg = {
+  type: 'image' as const,
+  url: 'https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=1920',
+  objectFit: 'cover' as const,
+  at: { x: 0, y: 0, w: 1920, h: 1080 },
+};
+
+// Semi-transparent overlay to improve text legibility
+const overlay = shape({
+  shape: 'rectangle',
+  fill: 'rgba(0, 0, 0, 0.45)',
+  radius: 0,
+});
+```
+
+---
+
+## Shapes
+
+The `shape()` builder renders a vector primitive. Use shapes for backgrounds, dividers, decorative accents, callout boxes, and connector lines. All shapes accept a fill color, gradient, or structured fill stack, plus stroke and opacity controls.
+
+### Inline syntax
+
+```typescript
+const layer = {
+  type: 'shape' as const,
+  shape: 'rectangle',
+  fill: '#5B4CF5',
+  radius: 12,
+  opacity: 0.9,
+  at: { x: 80, y: 80, w: 400, h: 200 },
+};
+```
+
+### Builder function syntax
+
+```typescript
+import { shape } from '@abloatai/decks';
+
+const layer = shape({
+  shape: 'rectangle',
+  fill: '#5B4CF5',
+  radius: 12,
+  opacity: 0.9,
+});
+```
+
+### ShapeKind values
+
+<ParamField body="shape" type="'rectangle' | 'circle' | 'ellipse' | 'triangle' | 'line'" required>
+  The geometric primitive to render. `'circle'` renders a perfect circle (use square `at` dimensions). `'ellipse'` renders a stretched oval. `'triangle'` renders a filled triangle pointing up. `'line'` renders a line between two endpoints — see [Line shapes](#line-shapes) below.
+</ParamField>
+
+### Fill options
+
+You can fill a shape with a solid color, a CSS gradient, or a structured fill stack.
+
+<ParamField body="fill" type="string">
+  Solid fill color as a CSS color string, e.g. `'#5B4CF5'`, `'rgba(91, 76, 245, 0.2)'`, or `'var(--slide-brand)'`.
+</ParamField>
+
+<ParamField body="gradient" type="string">
+  CSS gradient string, e.g. `'linear-gradient(135deg, #5B4CF5 0%, #818CF8 100%)'`. When set, takes precedence over `fill`.
+</ParamField>
+
+<ParamField body="fills" type="Fill[]">
+  A structured fill stack for advanced compositing — solid layers, gradients, mesh gradients, image fills, and shader fills stacked in order. See the [Fills reference](/styling/fills) for the full schema.
+</ParamField>
+
+<ParamField body="opacity" type="number">
+  Shape opacity from `0` (fully transparent) to `1` (fully opaque). Applies to the fill only, not the stroke.
+</ParamField>
+
+### Stroke options
+
+<ParamField body="stroke" type="string">
+  Stroke color as a CSS color string.
+</ParamField>
+
+<ParamField body="strokeWidth" type="number">
+  Stroke thickness in pixels. Set to `0` to suppress the stroke entirely.
+</ParamField>
+
+### Rectangle radius
+
+<ParamField body="radius" type="number">
+  Corner radius in pixels for `'rectangle'` shapes. Applied uniformly to all four corners. Ignored for other shape kinds.
+</ParamField>
+
+### Shape examples
+
+<CodeGroup>
+
+```typescript Rectangle with gradient
+import { shape } from '@abloatai/decks';
+
+const card = shape({
+  shape: 'rectangle',
+  gradient: 'linear-gradient(135deg, #5B4CF5 0%, #818CF8 100%)',
+  radius: 16,
+  opacity: 1,
+});
+```
+
+```typescript Decorative circle accent
+import { shape } from '@abloatai/decks';
+
+const dot = shape({
+  shape: 'circle',
+  fill: 'var(--slide-brand)',
+  opacity: 0.15,
+});
+```
+
+```typescript Outlined box
+import { shape } from '@abloatai/decks';
+
+const box = shape({
+  shape: 'rectangle',
+  fill: 'transparent',
+  stroke: '#5B4CF5',
+  strokeWidth: 2,
+  radius: 8,
+});
+```
+
+```typescript Triangle marker
+import { shape } from '@abloatai/decks';
+
+const arrow = shape({
+  shape: 'triangle',
+  fill: '#ef4444',
+});
+```
+
+</CodeGroup>
+
+### Line shapes
+
+The `'line'` shape kind draws a line between two points within the layer box. Use `x1, y1, x2, y2` to position endpoints relative to the layer frame (the `at` box). Add arrowheads with `arrowStart` and `arrowEnd`.
+
+<ParamField body="x1" type="number">
+  Horizontal start coordinate, relative to the layer box origin.
+</ParamField>
+
+<ParamField body="y1" type="number">
+  Vertical start coordinate, relative to the layer box origin.
+</ParamField>
+
+<ParamField body="x2" type="number">
+  Horizontal end coordinate, relative to the layer box origin.
+</ParamField>
+
+<ParamField body="y2" type="number">
+  Vertical end coordinate, relative to the layer box origin.
+</ParamField>
+
+<ParamField body="arrowStart" type="boolean">
+  When `true`, renders an arrowhead at the start endpoint (`x1, y1`).
+</ParamField>
+
+<ParamField body="arrowEnd" type="boolean">
+  When `true`, renders an arrowhead at the end endpoint (`x2, y2`).
+</ParamField>
+
+```typescript
+import { shape } from '@abloatai/decks';
+
+// Horizontal divider line
+const divider = shape({
+  shape: 'line',
+  stroke: '#e5e7eb',
+  strokeWidth: 1,
+  x1: 0,
+  y1: 0,
+  x2: 1,
+  y2: 0,
+});
+
+// Arrow pointing right with arrowhead
+const arrow = shape({
+  shape: 'line',
+  stroke: '#5B4CF5',
+  strokeWidth: 2,
+  x1: 0,
+  y1: 0.5,
+  x2: 1,
+  y2: 0.5,
+  arrowEnd: true,
+});
+```
+
+<Note>
+  Line endpoints (`x1, y1, x2, y2`) are in the coordinate space of the layer box defined by `at`. A value of `0` maps to the left/top edge and `1` maps to the right/bottom edge (normalized), so a horizontal line from left to right is `x1: 0, y1: 0.5, x2: 1, y2: 0.5`.
+</Note>
+
+---
+
+## Icons
+
+The `icon()` builder places a single icon from the Ablo icon library. Icons are identified by a short key string — the same keys used in the Ablo editor's icon picker. You can optionally set a fill color; the icon inherits the deck theme's foreground color when `color` is omitted.
+
+### Inline syntax
+
+```typescript
+const layer = {
+  type: 'icon' as const,
+  icon: 'rocket',
+  color: '#5B4CF5',
+  at: { x: 880, y: 480, w: 160, h: 160 },
+};
+```
+
+### Builder function syntax
+
+Pass a key string for the simplest case, or an options object when you want to set a color:
+
+```typescript
+import { icon } from '@abloatai/decks';
+
+// Shorthand — key string only
+const layer = icon('rocket');
+
+// Options object with color
+const layer = icon({
+  icon: 'bar-chart',
+  color: 'var(--slide-brand)',
+});
+```
+
+### Icon options
+
+<ParamField body="icon" type="string" required>
+  Icon key string from the Ablo icon library, e.g. `'rocket'`, `'bar-chart'`, `'check-circle'`, `'globe'`. Key names follow kebab-case.
+</ParamField>
+
+<ParamField body="color" type="string">
+  Fill color for the icon as a CSS color string. When omitted, the icon uses the deck theme's default foreground color.
+</ParamField>
+
+### Icon grid example
+
+```typescript
+import { icon } from '@abloatai/decks';
+
+const icons = [
+  { key: 'bar-chart',    label: 'Analytics',    x: 120 },
+  { key: 'globe',        label: 'Global Reach',  x: 440 },
+  { key: 'check-circle', label: 'Reliability',   x: 760 },
+  { key: 'rocket',       label: 'Performance',   x: 1080 },
+];
+
+const layers = icons.flatMap(({ key, label, x }) => [
+  {
+    type: 'icon' as const,
+    icon: key,
+    color: 'var(--slide-brand)',
+    at: { x, y: 400, w: 120, h: 120 },
+  },
+  {
+    type: 'text' as const,
+    text: label,
+    style: 'caption' as const,
+    align: 'center' as const,
+    at: { x: x - 40, y: 540, w: 200, h: 48 },
+  },
+]);
+```
+
+<Tip>
+  Scale icons generously — a 120×120 icon sits comfortably on a 1920×1080 slide as a standalone visual. For inline decorative use alongside text, 32×32 or 48×48 works well. Always set equal `w` and `h` values to preserve the icon's square aspect ratio.
+</Tip>

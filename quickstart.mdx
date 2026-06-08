@@ -1,0 +1,127 @@
+---
+title: "Quickstart: Create Your First Ablo Deck in Minutes"
+sidebarTitle: "Quickstart"
+description: "Install @abloatai/decks, authenticate with your API key, and run a working script that creates a deck with a slide, text layer, and bar chart."
+---
+
+This guide walks you through installing the Ablo Decks SDK, obtaining an API key, and running a complete script that creates a real deck in your Ablo workspace. By the end you will have a working foundation you can build on.
+
+<Steps>
+  <Step title="Install the SDK">
+    Add `@abloatai/decks` to your project. The package is published to npm and works with any Node.js project that supports ES modules or CommonJS.
+
+    <CodeGroup>
+      ```bash npm
+      npm i @abloatai/decks
+      ```
+
+      ```bash yarn
+      yarn add @abloatai/decks
+      ```
+
+      ```bash pnpm
+      pnpm add @abloatai/decks
+      ```
+    </CodeGroup>
+
+    The package ships with full TypeScript type definitions — no separate `@types` package is required.
+  </Step>
+
+  <Step title="Get your API key">
+    The SDK authenticates every request with a server-side API key tied to your Ablo workspace.
+
+    1. Sign in to [tryablo.com](https://tryablo.com) and open your workspace.
+    2. Navigate to **Settings → API**.
+    3. Copy your API key.
+
+    Store the key as an environment variable so it never appears in your source code:
+
+    ```bash
+    export ABLO_API_KEY="your-api-key-here"
+    ```
+
+    For persistent configuration, add the line above to your shell profile (e.g. `~/.zshrc`) or use a `.env` file with a tool like [`dotenv`](https://www.npmjs.com/package/dotenv).
+
+    <Warning>
+      Never paste your API key directly into source files or commit it to version control. Use environment variables or a secrets manager instead.
+    </Warning>
+  </Step>
+
+  <Step title="Create your first deck">
+    Create a file called `deck.ts` (or `deck.mjs` for plain JavaScript) and paste the following code. It creates a deck with one slide that contains a headline text layer and a bar chart showing two quarters of revenue data.
+
+    ```typescript
+    import { Decks } from '@abloatai/decks';
+
+    const ablo = new Decks(process.env.ABLO_API_KEY);
+
+    const deck = await ablo.decks.create({
+      title: 'Q3 Board Update',
+      slides: [
+        {
+          title: 'Revenue',
+          layers: [
+            {
+              type: 'text',
+              text: 'Revenue up 40% YoY',
+              style: 'h1',
+              at: { x: 160, y: 120, w: 1600, h: 160 },
+            },
+            {
+              type: 'bar',
+              data: [
+                { label: 'Q1', value: 120 },
+                { label: 'Q2', value: 168 },
+              ],
+              at: { x: 160, y: 340, w: 1600, h: 600 },
+            },
+          ],
+        },
+      ],
+    });
+
+    console.log('Deck created:', deck.id);
+    ```
+
+    The `at` object positions each layer on the 1920 × 1080 slide canvas using pixel coordinates: `x` and `y` set the top-left corner, `w` and `h` set the width and height.
+  </Step>
+
+  <Step title="Run the script">
+    Execute the script with Node.js. If you are using TypeScript, compile first with `tsc` or run directly with `ts-node` or `tsx`:
+
+    <CodeGroup>
+      ```bash Node.js (compiled JS)
+      node deck.js
+      ```
+
+      ```bash tsx (TypeScript, no compile step)
+      npx tsx deck.ts
+      ```
+
+      ```bash ts-node
+      npx ts-node deck.ts
+      ```
+    </CodeGroup>
+
+    A successful run prints the new deck's ID to your console:
+
+    ```
+    Deck created: dec_01j9z...
+    ```
+
+    Open your Ablo workspace — the deck named **Q3 Board Update** will appear in your library, ready to preview, share, or refine.
+  </Step>
+</Steps>
+
+## What's next
+
+Now that you have a working deck, explore the rest of the SDK:
+
+<CardGroup cols={2}>
+  <Card title="Authentication" icon="key" href="/authentication">
+    Learn all the ways to pass your API key and keep it secure.
+  </Card>
+  <Card title="API Reference" icon="code" href="/api/decks">
+    Browse the full surface area — decks, slides, layers, themes, and more.
+  </Card>
+</CardGroup>

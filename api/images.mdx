@@ -1,0 +1,158 @@
+---
+title: "Images API — Upload and Serve Images via Ablo CDN"
+sidebarTitle: "Images API"
+description: "Upload raw image bytes directly to Ablo's hosted CDN storage and get back a stable URL you can pass to the image() builder or any layer's imageFill."
+---
+
+The Images API closes the "slides as code" loop for local files. Instead of hosting images externally before referencing them in a slide, you upload the raw bytes through the SDK and get back a CDN URL that you can pass straight to `image(url)` or use in an `imageFill`. The SDK uploads the bytes to Ablo's hosted storage on your behalf — your API key is the only credential required. The returned URL is a stable CDN edge URL that remains valid across subsequent renders.
+
+---
+
+## `ablo.images.upload(params)` → `UploadedImage`
+
+Uploads image bytes to Ablo's CDN and returns the hosted URL.
+
+<ParamField path="params.bytes" type="Uint8Array | ArrayBuffer" required>
+  The raw image bytes. Accepts either a `Uint8Array` (the type you get from `fs.readFileSync` in Node.js) or an `ArrayBuffer`.
+</ParamField>
+
+<ParamField path="params.contentType" type="ImageMime" required>
+  The MIME type of the image. Must be one of the allowed types:
+
+  | Value | Format |
+  |---|---|
+  | `'image/jpeg'` | JPEG |
+  | `'image/png'` | PNG |
+  | `'image/gif'` | GIF |
+  | `'image/webp'` | WebP |
+  | `'image/svg+xml'` | SVG |
+  | `'image/avif'` | AVIF |
+
+  Passing an unlisted MIME type throws a validation error before any network request is made.
+</ParamField>
+
+<ParamField path="params.fileName" type="string">
+  Optional cosmetic file name used to form the S3 key. Does not affect the returned URL. Useful for debugging storage keys.
+</ParamField>
+
+<ParamField path="params.deckId" type="string">
+  Optional deck id that scopes the storage key. Images uploaded with a `deckId` are namespaced under that deck in storage. Omitting it still works — the file is stored under a random id.
+</ParamField>
+
+**Returns `UploadedImage`**
+
+<ResponseField name="url" type="string">
+  The CDN URL for the uploaded image. Pass this to `image(url)`, `imageFill(url)`, or use it directly in an `{ type: 'image', url, at }` layer object.
+</ResponseField>
+
+<ResponseField name="s3Key" type="string">
+  The S3 key where the file is stored. Informational — you don't need this for slide authoring.
+</ResponseField>
+
+---
+
+## Examples
+
+### Upload a local file with Node.js
+
+Read a file from disk using `fs.readFileSync`, then upload it and use the CDN URL as an image layer.
+
+```typescript
+import fs from 'fs';
+import Decks, { image } from '@abloatai/decks';
+
+const ablo = new Decks(process.env.ABLO_API_KEY!);
+
+// Read the file — readFileSync returns a Buffer, which extends Uint8Array.
+const bytes = fs.readFileSync('./assets/hero.png');
+
+const uploaded = await ablo.images.upload({
+  bytes,
+  contentType: 'image/png',
+  fileName: 'hero.png',
+  deckId: deck.id,         // optional — scopes the storage key
+});
+
+console.log('CDN URL:', uploaded.url);
+
+// Use it directly as a slide layer.
+const slide = await ablo.slides.create({
+  deckId: deck.id,
+  order: 0,
+  layers: [
+    {
+      type: 'image',
+      url: uploaded.url,   // the CDN URL from the upload
+      objectFit: 'cover',
+      at: { x: 960, y: 0, w: 960, h: 1080 },
+    },
+  ],
+});
+```
+
+### Upload and use with the `image()` builder
+
+When you're filling a layout placeholder or using the functional builder style, pass the URL to `image()`.
+
+```typescript
+import fs from 'fs';
+import Decks, { image } from '@abloatai/decks';
+
+const ablo = new Decks(process.env.ABLO_API_KEY!);
+const deck  = await ablo.decks.create({ title: 'Product Launch' });
+
+// Upload multiple assets up front.
+const [heroCdn, logoCdn] = await Promise.all([
+  ablo.images.upload({
+    bytes: fs.readFileSync('./assets/hero.jpg'),
+    contentType: 'image/jpeg',
+    fileName: 'hero.jpg',
+  }),
+  ablo.images.upload({
+    bytes: fs.readFileSync('./assets/logo.svg'),
+    contentType: 'image/svg+xml',
+    fileName: 'logo.svg',
+  }),
+]);
+
+// Reference the CDN URLs in slide layers.
+await ablo.decks.create({
+  title: 'Product Launch',
+  slides: [
+    {
+      title: 'Cover',
+      layers: [
+        {
+          type: 'image',
+          url: heroCdn.url,
+          objectFit: 'cover',
+          at: { x: 0, y: 0, w: 1920, h: 1080 },
+        },
+        {
+          type: 'image',
+          url: logoCdn.url,
+          objectFit: 'contain',
+          at: { x: 80, y: 40, w: 200, h: 60 },
+        },
+      ],
+    },
+  ],
+});
+```
+
+### Upload from a browser `File` input
+
+In a browser context, read the file as an `ArrayBuffer` and upload it.
+
+```typescript
+async function uploadFromInput(file: File, deckId: string): Promise<string> {
+  const buffer = await file.arrayBuffer();
+  const uploaded = await ablo.images.upload({
+    bytes: buffer,
+    contentType: file.type as ImageMime,
+    fileName: file.name,
+    deckId,
+  });
+  return uploaded.url;
+}
+```

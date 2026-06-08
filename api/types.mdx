@@ -1,0 +1,211 @@
+---
+title: "Shared Types — Decks SDK Complete Type Reference"
+sidebarTitle: "Types"
+description: "Reference for CommitReceipt, RequestOptions, record types, LayerPosition, LayerType, and slide canvas settings used throughout the SDK."
+---
+
+This page documents the shared TypeScript types that appear in method signatures and return values across the SDK. All types are exported from `@abloatai/decks` and can be imported directly for use in your own type annotations.
+
+```typescript
+import type {
+  CommitReceipt,
+  RequestOptions,
+  DeckRecord,
+  SlideRecord,
+  LayerRecord,
+  LayoutRecord,
+  LayerPosition,
+  LayerType,
+} from '@abloatai/decks';
+```
+
+---
+
+## CommitReceipt
+
+Every mutating method (`create`, `update`, `delete`) returns a `CommitReceipt`. It tells you whether the server has durably committed the operation.
+
+<ResponseField name="id" type="string">
+  The commit id. Stable across retries with the same `idempotencyKey`.
+</ResponseField>
+
+<ResponseField name="status" type="'queued' | 'confirmed'">
+  The acknowledgement level reached before the call returned. `'confirmed'` means the write is durable; `'queued'` means the server accepted it but has not yet confirmed durability. Controlled by `RequestOptions.wait`.
+</ResponseField>
+
+<ResponseField name="lastSyncId" type="number">
+  The sync cursor after this commit. Present when status is `'confirmed'`. You can use this to wait for a specific sync position in real-time clients.
+</ResponseField>
+
+---
+
+## RequestOptions
+
+Pass `RequestOptions` as the last argument to any mutating method to control commit behaviour.
+
+<ParamField path="wait" type="'queued' | 'confirmed'" default="'confirmed'">
+  The acknowledgement level to wait for before the promise resolves. `'confirmed'` (default) waits for a durable write — safe for scripts that must guarantee persistence before exiting. `'queued'` returns as soon as the server accepts the operation, reducing latency at the cost of a weaker guarantee.
+</ParamField>
+
+<ParamField path="idempotencyKey" type="string | null">
+  A unique key for safe retries. If you call the same method twice with the same key, the server returns the original `CommitReceipt` without creating a duplicate. Pass `null` to explicitly opt out of idempotency (rare). Omitting the field lets the server assign a key automatically.
+</ParamField>
+
+---
+
+## DeckRecord
+
+Returned by `ablo.decks.retrieve(id)`.
+
+<ResponseField name="id" type="string">The deck's id.</ResponseField>
+<ResponseField name="title" type="string">The deck's display title.</ResponseField>
+<ResponseField name="layoutId" type="string | null">
+  The layout container this deck uses for template inheritance. `null` if no layout container is assigned.
+</ResponseField>
+<ResponseField name="themeId" type="string | null">
+  The theme applied to this deck. `null` if using the workspace default.
+</ResponseField>
+
+---
+
+## SlideRecord
+
+Returned by `ablo.slides.retrieve(id)` and `ablo.slides.list({ deckId })`.
+
+<ResponseField name="id" type="string">The slide's id.</ResponseField>
+<ResponseField name="deckId" type="string">The deck this slide belongs to.</ResponseField>
+<ResponseField name="title" type="string">The slide's title.</ResponseField>
+<ResponseField name="order" type="number">Zero-based position in the deck.</ResponseField>
+<ResponseField name="templateId" type="string | null">
+  The `SlideLayout` id this slide is based on. `null` for slides without a layout.
+</ResponseField>
+<ResponseField name="notes" type="string | null">
+  Presenter notes attached to the slide.
+</ResponseField>
+<ResponseField name="settings" type="SlideCompositionSettings | null">
+  The slide's canvas settings (background, size, grid, layout exclusions). `null` if all defaults apply.
+</ResponseField>
+
+---
+
+## LayerRecord
+
+Returned by `ablo.layers.retrieve(id)` and `ablo.layers.list({ slideId })`.
+
+<ResponseField name="id" type="string">The layer's id.</ResponseField>
+<ResponseField name="slideId" type="string">The slide this layer belongs to.</ResponseField>
+<ResponseField name="type" type="LayerType">The layer's type — `'text'`, `'shape'`, `'icon'`, `'path'`, `'table'`, or `'chart'`.</ResponseField>
+<ResponseField name="position" type="LayerPosition">Geometry in 1920×1080 slide space.</ResponseField>
+<ResponseField name="data" type="unknown">Type-specific payload. Charts store `{ chartDocument }`, tables store `TableData`, shapes store `{ shapeType, ... }`.</ResponseField>
+<ResponseField name="contentJson" type="unknown">Rich text content for text-bearing layers. `null` for non-text types.</ResponseField>
+<ResponseField name="style" type="Record<string, unknown> | null">Compiled style object (effects: opacity, corner radius, shadows).</ResponseField>
+<ResponseField name="zIndex" type="number">Stacking order within the slide. Higher values render on top.</ResponseField>
+<ResponseField name="visible" type="boolean">Whether the layer renders.</ResponseField>
+<ResponseField name="imageFill" type="LayerImageFill | null">
+  Image fill applied to a shape layer. Contains `url`, optional `objectFit`, and optional intrinsic `width`/`height`.
+</ResponseField>
+<ResponseField name="metadata" type="LayerCompositionMetadata | null">
+  AI brief and placeholder metadata. Present on layout placeholder layers and layers with `prompt`/`examples` set.
+</ResponseField>
+<ResponseField name="layoutLayerId" type="string | null">
+  When this is a filled placeholder layer, the id of the layout layer it fills.
+</ResponseField>
+
+---
+
+## LayoutRecord
+
+Returned by `ablo.layouts.retrieve(id)`.
+
+<ResponseField name="id" type="string">The layout's id.</ResponseField>
+<ResponseField name="name" type="string">The layout's display name.</ResponseField>
+<ResponseField name="layoutId" type="string">The layout container this template belongs to.</ResponseField>
+<ResponseField name="settings" type="SlideCompositionSettings | null">Canvas settings (background, size) inherited by slides using this layout.</ResponseField>
+
+---
+
+## LayerPosition
+
+Describes the geometry of a layer in the slide canvas. All values are in the 1920×1080 coordinate space regardless of the slide's export size or display resolution.
+
+<ResponseField name="x" type="number">Left edge of the layer box in pixels.</ResponseField>
+<ResponseField name="y" type="number">Top edge of the layer box in pixels.</ResponseField>
+<ResponseField name="width" type="number">Width of the layer box in pixels.</ResponseField>
+<ResponseField name="height" type="number">Height of the layer box in pixels.</ResponseField>
+<ResponseField name="rotation" type="number">
+  Clockwise rotation in degrees around the layer's center. Omitted (or `0`) for no rotation.
+</ResponseField>
+
+---
+
+## LayerType
+
+The `type` discriminant on a persisted layer. Note that some input types map to different stored types — `bar`/`donut` inputs compile to `'chart'` layers, and `image` inputs compile to `'shape'` layers with an `imageFill`.
+
+```typescript
+type LayerType = 'text' | 'shape' | 'icon' | 'path' | 'table' | 'chart';
+```
+
+| Value | Description |
+|---|---|
+| `'text'` | Text, bullet lists, and numbered lists. |
+| `'shape'` | Rectangles, circles, ellipses, triangles, lines, and image fills. |
+| `'icon'` | SVG icon layers. |
+| `'path'` | Raw SVG path layers (advanced). |
+| `'table'` | Data tables. |
+| `'chart'` | All chart families (bar, donut, line, etc.). |
+
+---
+
+## SlideSettingsFields
+
+Fields you can pass when creating or updating a slide to control canvas behaviour. All fields are optional — omitting them leaves the existing setting unchanged.
+
+<ParamField path="background" type="SlideBackgroundInput">
+  Slide background. Accepts a color string, a background builder result, or a raw CSS string. Overrides the layout's background for this slide.
+</ParamField>
+
+<ParamField path="size" type="SlideSizePreset">
+  A size preset id that expands to `width`, `height`, and `aspectRatio` in one field. See [SlideSizePreset](#slidesizepreset) below.
+</ParamField>
+
+<ParamField path="width" type="number">Canvas width in pixels (overrides the preset width when set directly).</ParamField>
+<ParamField path="height" type="number">Canvas height in pixels.</ParamField>
+<ParamField path="aspectRatio" type="'16:9' | '16:10' | '4:3' | 'custom'">Aspect ratio hint used by the renderer for responsive scaling.</ParamField>
+
+<ParamField path="showGrid" type="boolean">
+  Show the alignment grid overlay in the editor.
+</ParamField>
+
+<ParamField path="gridSize" type="number">
+  Grid cell size in pixels (default 40).
+</ParamField>
+
+<ParamField path="excludedLayoutLayerIds" type="string[]">
+  A list of layout layer ids that this slide opts out of inheriting. Equivalent to hiding a master layer for just this slide (PowerPoint-style).
+</ParamField>
+
+<ParamField path="showMasterShapes" type="boolean">
+  When `false`, this slide does not composite its layout's master layers. Defaults to `true`.
+</ParamField>
+
+---
+
+## SlideSizePreset
+
+Pass one of these preset ids to `size` on a slide to set its canvas dimensions in one step.
+
+| Preset id | Width | Height | Aspect ratio |
+|---|---|---|---|
+| `'16:9'` | 1920 | 1080 | 16:9 |
+| `'16:10'` | 1920 | 1200 | 16:10 |
+| `'a4-portrait'` | 2480 | 3508 | custom |
+
+```typescript
+// Set a slide to A4 portrait at creation time.
+await ablo.slides.create({
+  deckId: deck.id,
+  order: 0,
+  size: 'a4-portrait',
+});
+```

@@ -1,0 +1,434 @@
+---
+title: "Text Layers: Plain Text, Bullet Lists & Numbered Lists"
+sidebarTitle: "Text"
+description: "Add styled text, bullet lists, and numbered lists to your Ablo slides using the text(), bullets(), and numbered() builder functions."
+---
+
+Text is the most common layer type in any presentation. The Decks SDK gives you three dedicated layer types — plain text, bullet lists, and numbered lists — each with a full set of typography options and two authoring styles: an inline object you embed directly in a layer array, or a builder function that produces the same result. Both produce an identical output and are interchangeable; choose whichever reads more clearly in your code.
+
+All three types share the same base typography options from `TextOptions`. You can set the semantic `style` preset (which resolves to theme CSS variables at render time), override individual properties like `fontSize`, `color`, and `fontFamily`, and control paragraph spacing and alignment. Builder functions validate all options through Zod at call time, so you'll get a clear runtime error before anything is sent to the API.
+
+---
+
+## Text
+
+A `text` layer renders one or more lines of styled prose. Pass a single string for a one-liner, or an array of strings to stack multiple paragraphs with consistent styling.
+
+### Inline syntax
+
+```typescript
+import { Decks } from '@abloatai/decks';
+
+const layer = {
+  type: 'text' as const,
+  text: 'Total Revenue',
+  style: 'h2',
+  color: '#1a1a2e',
+  at: { x: 80, y: 120, w: 900, h: 80 },
+};
+```
+
+### Builder function syntax
+
+```typescript
+import { Decks, text } from '@abloatai/decks';
+
+const layer = text('Total Revenue', {
+  style: 'h2',
+  color: '#1a1a2e',
+});
+
+// Use the result with place() or addLayer():
+// place(slide, layer, { x: 80, y: 120, w: 900, h: 80 });
+```
+
+### Multi-line text
+
+Pass an array of strings to render multiple paragraphs — each string becomes its own line, all sharing the same style options.
+
+```typescript
+import { text } from '@abloatai/decks';
+
+const layer = text(
+  [
+    'Ablo Decks makes it easy to build slides programmatically.',
+    'Every layer is validated at authoring time.',
+    'Ship pixel-perfect presentations from your codebase.',
+  ],
+  {
+    style: 'body1',
+    lineHeight: '1.6',
+    color: '#374151',
+  }
+);
+```
+
+### TextStyle presets
+
+The `style` option maps to one of eight theme-aware presets. Render-time CSS variables resolve these to the appropriate font size, weight, and line-height for the active deck theme — so your text automatically matches the presentation's visual language.
+
+<CardGroup cols={4}>
+  <Card title="title" icon="heading">
+    Largest display text — slide titles, hero headers
+  </Card>
+  <Card title="h1" icon="h1">
+    Primary section heading
+  </Card>
+  <Card title="h2" icon="h2">
+    Secondary heading or subtitle
+  </Card>
+  <Card title="h3" icon="h3">
+    Tertiary heading, callout labels
+  </Card>
+  <Card title="body1" icon="text">
+    Standard body copy
+  </Card>
+  <Card title="body2" icon="text-size">
+    Smaller body text, secondary prose
+  </Card>
+  <Card title="note" icon="sticky-note">
+    Footnotes, caveats, source lines
+  </Card>
+  <Card title="caption" icon="subtitles">
+    Image captions, chart sub-labels
+  </Card>
+</CardGroup>
+
+### TextOptions reference
+
+<ParamField body="style" type="'title' | 'h1' | 'h2' | 'h3' | 'body1' | 'body2' | 'note' | 'caption'">
+  Theme text style preset. Resolves to CSS variable-backed typography at render time. Override individual fields (`fontSize`, `fontWeight`, etc.) to customize beyond the preset.
+</ParamField>
+
+<ParamField body="fontSize" type="string">
+  Font size as a CSS string, e.g. `'24px'` or `'1.5rem'`. Overrides the style preset's default size.
+</ParamField>
+
+<ParamField body="color" type="string">
+  Text color as a CSS color string, e.g. `'#1a1a2e'`, `'rgba(0,0,0,0.8)'`, or `'var(--slide-brand)'`.
+</ParamField>
+
+<ParamField body="fontFamily" type="string">
+  Font family — must be one of the families available in the deck theme (`fontFamilySchema`).
+</ParamField>
+
+<ParamField body="fontWeight" type="number | string">
+  Font weight on the 100–900 axis, e.g. `400`, `600`, or `'bold'`.
+</ParamField>
+
+<ParamField body="lineHeight" type="string">
+  Line height multiplier or absolute value, e.g. `'1.5'` or `'28px'`.
+</ParamField>
+
+<ParamField body="letterSpacing" type="string">
+  Letter spacing (tracking), e.g. `'0.02em'` or `'1px'`.
+</ParamField>
+
+<ParamField body="backgroundColor" type="string">
+  Inline text highlight color — paints a background behind the text itself (not the layer box).
+</ParamField>
+
+<ParamField body="spaceBefore" type="string">
+  Paragraph spacing above, e.g. `'12px'`.
+</ParamField>
+
+<ParamField body="spaceAfter" type="string">
+  Paragraph spacing below, e.g. `'8px'`.
+</ParamField>
+
+<ParamField body="bold" type="boolean">
+  Shorthand for `fontWeight: 700`. If `fontWeight` is also set, `fontWeight` wins.
+</ParamField>
+
+<ParamField body="italic" type="boolean">
+  Render text in italic style.
+</ParamField>
+
+<ParamField body="align" type="'left' | 'center' | 'right' | 'justify'">
+  Horizontal text alignment within the layer box.
+</ParamField>
+
+### Full example
+
+```typescript
+import { text } from '@abloatai/decks';
+
+// A slide title with custom tracking and centered alignment
+const heading = text('Q4 2024 Business Review', {
+  style: 'title',
+  fontWeight: 700,
+  letterSpacing: '-0.02em',
+  align: 'center',
+  color: 'var(--slide-brand)',
+});
+
+// A subtitle with reduced opacity via CSS color
+const subtitle = text('Prepared for the Board of Directors', {
+  style: 'h3',
+  color: 'rgba(30, 30, 60, 0.6)',
+  align: 'center',
+  spaceBefore: '8px',
+});
+
+// Body copy with generous line height
+const body = text(
+  [
+    'Revenue grew 34% year-over-year, reaching $4.2B.',
+    'Operating margins expanded to 28%, up from 22% in Q4 2023.',
+  ],
+  {
+    style: 'body1',
+    lineHeight: '1.7',
+    color: '#374151',
+  }
+);
+```
+
+---
+
+## Bullets
+
+A `bullets` layer renders an unordered list. Pass an array of strings — each string becomes one bullet item. Bullet options extend all of `TextOptions`, so you can style both the marker and the item text in one call.
+
+### Inline syntax
+
+```typescript
+const layer = {
+  type: 'bullets' as const,
+  items: ['Increased ARR by 40%', 'Launched in 3 new markets', 'Reduced churn to 1.2%'],
+  style: 'body1',
+  bulletColor: 'var(--slide-brand)',
+  at: { x: 120, y: 300, w: 800, h: 400 },
+};
+```
+
+### Builder function syntax
+
+```typescript
+import { bullets } from '@abloatai/decks';
+
+const layer = bullets(
+  ['Increased ARR by 40%', 'Launched in 3 new markets', 'Reduced churn to 1.2%'],
+  {
+    style: 'body1',
+    bulletColor: 'var(--slide-brand)',
+    bulletSize: 8,
+    itemSpacing: 16,
+  }
+);
+```
+
+### Bullet-specific options
+
+These options are available in addition to all `TextOptions` fields.
+
+<ParamField body="listStyleType" type="'disc' | 'circle' | 'square'">
+  Standard CSS bullet marker shape. Use `bulletStyle` for custom icon keys.
+</ParamField>
+
+<ParamField body="bulletStyle" type="string">
+  Custom bullet icon key, e.g. `'circle-filled'`, `'arrow-right'`, `'check'`. Overrides `listStyleType` when set.
+</ParamField>
+
+<ParamField body="bulletColor" type="string">
+  Color applied to the bullet marker only — independent of the item text color.
+</ParamField>
+
+<ParamField body="bulletSize" type="number">
+  Bullet marker size in pixels.
+</ParamField>
+
+<ParamField body="bulletStrokeWidth" type="number">
+  Stroke width for outlined bullet markers.
+</ParamField>
+
+<ParamField body="itemSpacing" type="number">
+  Vertical spacing in pixels between list items.
+</ParamField>
+
+<ParamField body="bulletTextGap" type="number">
+  Horizontal gap in pixels between the bullet marker and the item text.
+</ParamField>
+
+<ParamField body="bulletAlign" type="'center' | 'top'">
+  Vertical alignment of the bullet marker relative to the first line of item text.
+</ParamField>
+
+### Example with custom markers
+
+```typescript
+import { bullets } from '@abloatai/decks';
+
+const highlights = bullets(
+  [
+    'Enterprise plan now includes SSO and audit logs',
+    'API rate limits increased to 10,000 req/min',
+    'New Python and Go SDKs available',
+  ],
+  {
+    style: 'body1',
+    bulletStyle: 'check',
+    bulletColor: '#22c55e',
+    bulletSize: 14,
+    itemSpacing: 20,
+    bulletAlign: 'top',
+    color: '#111827',
+    lineHeight: '1.5',
+  }
+);
+```
+
+<Tip>
+  Use `bulletColor` to match your brand palette while keeping item text in a neutral dark color. This creates visual hierarchy between the marker and the content without changing the text style.
+</Tip>
+
+---
+
+## Numbered
+
+A `numbered` layer renders an ordered list. Like `bullets`, pass an array of strings and style both the number marker and the text. The `listStyle` option controls the numbering scheme — decimal, alphabetic, or Roman numerals.
+
+### Inline syntax
+
+```typescript
+const layer = {
+  type: 'numbered' as const,
+  items: [
+    'Connect to your data source',
+    'Map columns to chart fields',
+    'Publish to your deck',
+  ],
+  style: 'body1',
+  listStyle: 'decimal',
+  at: { x: 120, y: 300, w: 800, h: 400 },
+};
+```
+
+### Builder function syntax
+
+```typescript
+import { numbered } from '@abloatai/decks';
+
+const layer = numbered(
+  [
+    'Connect to your data source',
+    'Map columns to chart fields',
+    'Publish to your deck',
+  ],
+  {
+    style: 'body1',
+    listStyle: 'decimal',
+    listColor: 'var(--slide-brand)',
+    itemSpacing: 18,
+  }
+);
+```
+
+### Numbered-specific options
+
+<ParamField body="listStyle" type="'decimal' | 'lower-alpha' | 'upper-alpha' | 'lower-roman' | 'upper-roman'">
+  Numbering scheme for the markers. Defaults to `'decimal'` (1, 2, 3…).
+</ParamField>
+
+<ParamField body="listColor" type="string">
+  Color applied to the number marker only.
+</ParamField>
+
+<ParamField body="listSize" type="number">
+  Font size for the number marker in pixels.
+</ParamField>
+
+<ParamField body="listFontFamily" type="string">
+  Font family for the number marker — lets you use a display font for numbers while keeping body text in the theme font.
+</ParamField>
+
+<ParamField body="listFontWeight" type="string">
+  Font weight for the number marker.
+</ParamField>
+
+<ParamField body="itemSpacing" type="number">
+  Vertical spacing in pixels between list items.
+</ParamField>
+
+<ParamField body="listTextGap" type="number">
+  Horizontal gap in pixels between the number marker and the item text.
+</ParamField>
+
+<ParamField body="listAlign" type="'center' | 'top'">
+  Vertical alignment of the number marker relative to the first line of item text.
+</ParamField>
+
+### Example with Roman numerals
+
+```typescript
+import { numbered } from '@abloatai/decks';
+
+const agenda = numbered(
+  [
+    'Executive Summary — 10 min',
+    'Financial Results — 20 min',
+    'Product Roadmap — 15 min',
+    'Q&A — 15 min',
+  ],
+  {
+    style: 'h3',
+    listStyle: 'upper-roman',
+    listColor: 'var(--slide-brand)',
+    listFontWeight: '600',
+    itemSpacing: 24,
+    listTextGap: 16,
+    listAlign: 'top',
+  }
+);
+```
+
+<Note>
+  The `listStyle` option mirrors the CSS `list-style-type` property vocabulary. Use `'lower-alpha'` for (a, b, c…), `'upper-alpha'` for (A, B, C…), `'lower-roman'` for (i, ii, iii…), and `'upper-roman'` for (I, II, III…).
+</Note>
+
+---
+
+## Choosing between inline and builder syntax
+
+<Tabs>
+  <Tab title="Use inline syntax when…">
+    You are composing a layer array for a slide definition and want all layer data in one place. The inline object is just a plain TypeScript object literal — no imports beyond `Decks` itself.
+
+    ```typescript
+    const slide = {
+      layers: [
+        {
+          type: 'text' as const,
+          text: 'Revenue Overview',
+          style: 'h1' as const,
+          at: { x: 80, y: 60, w: 900, h: 80 },
+        },
+        {
+          type: 'bullets' as const,
+          items: ['$4.2B total revenue', '34% YoY growth'],
+          style: 'body1' as const,
+          bulletColor: '#5B4CF5',
+          at: { x: 80, y: 180, w: 900, h: 200 },
+        },
+      ],
+    };
+    ```
+  </Tab>
+  <Tab title="Use builder functions when…">
+    You want to reuse content across slides, build content dynamically from data, or keep content construction separate from layout. Builder functions return a `LayerContent` object you spread into a placement call.
+
+    ```typescript
+    import { text, bullets, numbered } from '@abloatai/decks';
+
+    // Build content independently of position
+    const title = text('Revenue Overview', { style: 'h1' });
+    const kpis = bullets(['$4.2B total revenue', '34% YoY growth'], {
+      bulletColor: '#5B4CF5',
+    });
+
+    // Place at specific positions later
+    place(slide, title, { x: 80, y: 60, w: 900, h: 80 });
+    place(slide, kpis, { x: 80, y: 180, w: 900, h: 200 });
+    ```
+  </Tab>
+</Tabs>

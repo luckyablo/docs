@@ -1,0 +1,473 @@
+---
+title: "Layers API — Create, Update, Apply Ops, & Delete"
+sidebarTitle: "Layers"
+description: "Add and manage layers on a slide. Use typed ops for read-modify-write edits to chart, table, and text layers without overwriting unrelated fields."
+---
+
+The `ablo.layers` namespace manages the individual content elements — text, charts, tables, images, shapes, and icons — that live on a slide. Layers are addressed by id; capture the id returned by `create` and pass it directly to `update`, `applyOp`, or `delete` without an intermediate lookup. For read-modify-write edits to chart, table, or text content, use `applyOp` rather than `update` — it applies a typed operation against the current stored content so only the targeted fields change.
+
+---
+
+## `ablo.layers.create(slideId, layer, options?)`
+
+Adds a single layer to a slide. The `layer` argument is a flat, discriminated-union object; the SDK validates and compiles it before committing.
+
+### Parameters
+
+<ParamField path="slideId" type="string" required>
+  The id of the slide to add the layer to.
+</ParamField>
+
+<ParamField body="layer" type="LayerInput" required>
+  A flat object describing the layer to create. The `type` field discriminates the union. Common fields shared by all layer types:
+
+  <Expandable title="Shared fields (all types)">
+    <ParamField body="type" type="string" required>
+      Layer type. One of `"text"`, `"bullets"`, `"numbered"`, `"bar"`, `"donut"`, `"chart"`, `"table"`, `"image"`, `"shape"`, `"icon"`.
+    </ParamField>
+    <ParamField body="at" type="{ x, y, w, h, rotation? }" required>
+      Position and size in the 1920×1080 slide coordinate space.
+    </ParamField>
+    <ParamField body="z" type="number" optional>
+      Z-index integer. Higher values appear in front.
+    </ParamField>
+    <ParamField body="effects" type="object" optional>
+      Visual effects: opacity, corner radius, CSS filter, vertical alignment, drop shadows.
+    </ParamField>
+    <ParamField body="prompt" type="string" optional>
+      AI brief — a plain-language instruction for what the AI should generate in this slot.
+    </ParamField>
+    <ParamField body="examples" type="string[]" optional>
+      Sample outputs that guide AI generation for this slot.
+    </ParamField>
+  </Expandable>
+
+  <Expandable title="type: 'text'">
+    <ParamField body="text" type="string | string[]" required>
+      Text content. Pass an array for multi-paragraph text.
+    </ParamField>
+    <ParamField body="style" type="'title' | 'h1' | 'h2' | 'h3' | 'body1' | 'body2' | 'note' | 'caption'" optional>
+      Theme text style. CSS variables from the applied theme resolve the visual appearance.
+    </ParamField>
+    <ParamField body="fontSize" type="number" optional>Explicit font size in points.</ParamField>
+    <ParamField body="color" type="string" optional>Text color hex.</ParamField>
+    <ParamField body="fontFamily" type="string" optional>Font family name.</ParamField>
+    <ParamField body="bold" type="boolean" optional>Bold weight shorthand.</ParamField>
+    <ParamField body="italic" type="boolean" optional>Italic style shorthand.</ParamField>
+    <ParamField body="align" type="'left' | 'center' | 'right'" optional>Horizontal text alignment.</ParamField>
+  </Expandable>
+
+  <Expandable title="type: 'bar' | 'donut'">
+    <ParamField body="data" type="Array<{ label: string; value: number }>" required>
+      Chart data series. At least one datum is required.
+    </ParamField>
+    <ParamField body="title" type="string" optional>Chart title.</ParamField>
+    <ParamField body="orientation" type="'vertical' | 'horizontal'" optional>Bar chart orientation (bar only).</ParamField>
+    <ParamField body="valueFormat" type="string" optional>D3-style format string for axis/label values.</ParamField>
+    <ParamField body="dataLabels" type="boolean" optional>Show data labels on bars/segments.</ParamField>
+    <ParamField body="cagrArrow" type="boolean" optional>Overlay a CAGR arrow annotation (bar only).</ParamField>
+  </Expandable>
+
+  <Expandable title="type: 'chart'">
+    <ParamField body="document" type="CreateChartDocumentInput" required>
+      Full chart structure for any chart family. Validated by `createChartDocument()` against the canonical `ChartDocumentSchema`.
+    </ParamField>
+  </Expandable>
+
+  <Expandable title="type: 'table'">
+    <ParamField body="columns" type="string[] | ColumnDef[]" required>
+      Column headers. Pass strings for simple headers or `ColumnDef` objects for typed columns with widths and styles.
+    </ParamField>
+    <ParamField body="rows" type="TableCell[][]" required>
+      Table rows, each an array of cells matching the column count.
+    </ParamField>
+    <ParamField body="headerRows" type="number" optional>
+      Number of leading rows to treat as header rows. Defaults to `1`.
+    </ParamField>
+  </Expandable>
+
+  <Expandable title="type: 'image'">
+    <ParamField body="url" type="string" required>
+      Absolute URL of the image. Supported MIME types: `image/jpeg`, `image/png`, `image/gif`, `image/webp`, `image/svg+xml`, `image/avif`.
+    </ParamField>
+    <ParamField body="objectFit" type="'cover' | 'contain' | 'fill'" optional>
+      How the image fills its bounding box.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField body="options" type="RequestOptions" optional>
+  <Expandable title="options fields">
+    <ParamField body="wait" type="'queued' | 'confirmed'" optional default="confirmed">
+      `'confirmed'` (default) waits for the durable acknowledgement. `'queued'` returns as soon as the server accepts the write.
+    </ParamField>
+    <ParamField body="idempotencyKey" type="string" optional>
+      Idempotency key for safe retries.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+### Returns
+
+<ResponseField name="id" type="string">
+  Client-minted UUID for the new layer.
+</ResponseField>
+
+<ResponseField name="slideId" type="string">
+  The parent slide id.
+</ResponseField>
+
+<ResponseField name="type" type="string">
+  The layer type, e.g. `"text"`, `"bar"`, `"table"`.
+</ResponseField>
+
+### Example
+
+```typescript
+import { Decks } from '@abloatai/decks';
+
+const ablo = new Decks(process.env.ABLO_API_KEY!);
+
+const layer = await ablo.layers.create('slide_xyz789', {
+  type: 'bar',
+  data: [
+    { label: 'Q1', value: 120 },
+    { label: 'Q2', value: 180 },
+    { label: 'Q3', value: 252 },
+  ],
+  orientation: 'vertical',
+  at: { x: 160, y: 300, w: 900, h: 600 },
+});
+
+console.log(layer.id); // save this to update the chart data later
+```
+
+---
+
+## `ablo.layers.createRaw(params, options?)`
+
+Advanced escape hatch for creating a layer from raw `CreateLayerParams`. Use this when you need to supply a fully-constructed `data` or `contentJson` payload that the higher-level `LayerInput` builders do not expose.
+
+### Parameters
+
+<ParamField body="params" type="CreateLayerParams" required>
+  <Expandable title="params fields">
+    <ParamField body="slideId" type="string" required>
+      The parent slide id.
+    </ParamField>
+    <ParamField body="type" type="'text' | 'shape' | 'icon' | 'path' | 'table' | 'chart'" required>
+      The layer type.
+    </ParamField>
+    <ParamField body="position" type="LayerPosition" required>
+      Geometry in the slide coordinate space: `{ x, y, width, height, rotation? }`.
+    </ParamField>
+    <ParamField body="zIndex" type="number" optional>Z-index integer.</ParamField>
+    <ParamField body="visible" type="boolean" optional>Initial visibility.</ParamField>
+    <ParamField body="locked" type="boolean" optional>Lock the layer against accidental edits in the editor.</ParamField>
+    <ParamField body="text" type="string" optional>
+      Plain-text shorthand for text layers. The SDK converts this to the layer's rich text representation. Ignored when `contentJson` is also present.
+    </ParamField>
+    <ParamField body="contentJson" type="unknown" optional>
+      Rich content document for text-bearing layers. When provided, takes precedence over `text`.
+    </ParamField>
+    <ParamField body="data" type="Record<string, unknown>" optional>
+      Type-specific payload: `{ chartDocument }` for charts, `TableData` for tables, `{ shapeType, ... }` for shapes.
+    </ParamField>
+    <ParamField body="style" type="Record<string, unknown>" optional>
+      Layer-level style overrides.
+    </ParamField>
+    <ParamField body="imageFill" type="LayerImageFill" optional>
+      Picture fill for shape layers: `{ url, objectFit?, width?, height? }`.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField body="options" type="RequestOptions" optional>
+  <Expandable title="options fields">
+    <ParamField body="wait" type="'queued' | 'confirmed'" optional default="confirmed">
+      Acknowledgement level to wait for.
+    </ParamField>
+    <ParamField body="idempotencyKey" type="string" optional>
+      Idempotency key for safe retries.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+### Returns
+
+<ResponseField name="id" type="string">
+  Client-minted UUID for the new layer.
+</ResponseField>
+
+<ResponseField name="slideId" type="string">
+  The parent slide id.
+</ResponseField>
+
+<ResponseField name="type" type="string">
+  The layer type.
+</ResponseField>
+
+### Example
+
+```typescript
+const layer = await ablo.layers.createRaw({
+  slideId: 'slide_xyz789',
+  type: 'text',
+  position: { x: 160, y: 120, width: 1600, height: 160 },
+  contentJson: myPrebuiltContentDoc,
+});
+
+console.log(layer.id);
+```
+
+---
+
+## `ablo.layers.retrieve(id)`
+
+Fetches the full stored record for a layer by id. Requires a readable client.
+
+### Parameters
+
+<ParamField path="id" type="string" required>
+  The layer id.
+</ParamField>
+
+### Returns
+
+<ResponseField name="id" type="string">The layer UUID.</ResponseField>
+<ResponseField name="slideId" type="string">The parent slide id.</ResponseField>
+<ResponseField name="type" type="string">The layer type.</ResponseField>
+<ResponseField name="position" type="LayerPosition">
+  Geometry: `{ x, y, width, height, rotation? }` in the 1920×1080 coordinate space.
+</ResponseField>
+<ResponseField name="data" type="unknown">Type-specific payload (chart document, table data, shape descriptor).</ResponseField>
+<ResponseField name="contentJson" type="unknown">Rich text content for text-bearing layers. `null` for non-text types.</ResponseField>
+<ResponseField name="style" type="Record<string, unknown> | null">Layer-level style overrides.</ResponseField>
+<ResponseField name="zIndex" type="number">Stacking order.</ResponseField>
+<ResponseField name="visible" type="boolean">Whether the layer is visible.</ResponseField>
+<ResponseField name="imageFill" type="LayerImageFill | null">Picture fill, or `null`.</ResponseField>
+<ResponseField name="layoutLayerId" type="string | null">
+  The layout layer this slide layer is bound to, or `null` for free layers.
+</ResponseField>
+
+### Example
+
+```typescript
+const layer = await ablo.layers.retrieve('layer_def456');
+console.log(layer.type, layer.position);
+```
+
+---
+
+## `ablo.layers.list({ slideId })`
+
+Returns all layers on a slide. Requires a readable client.
+
+### Parameters
+
+<ParamField query="slideId" type="string" required>
+  The slide whose layers you want to list.
+</ParamField>
+
+### Returns
+
+An array of `LayerRecord` objects. Each entry has the same shape as the return value of `retrieve`.
+
+### Example
+
+```typescript
+const layers = await ablo.layers.list({ slideId: 'slide_xyz789' });
+
+for (const layer of layers) {
+  console.log(layer.zIndex, layer.type, layer.position);
+}
+```
+
+---
+
+## `ablo.layers.update(params, options?)`
+
+Applies a field-level patch to an existing layer. Each field you include overwrites the entire stored value for that field; fields you omit are left unchanged. Use `applyOp` instead when you want to surgically modify chart series, table cells, or text styles.
+
+### Parameters
+
+<ParamField body="params" type="UpdateLayerParams" required>
+  <Expandable title="params fields">
+    <ParamField body="id" type="string" required>
+      The layer id to update.
+    </ParamField>
+    <ParamField body="position" type="Partial<LayerPosition>" optional>
+      Geometry patch. Provide only the sub-fields you want to change (`x`, `y`, `width`, `height`, `rotation`).
+    </ParamField>
+    <ParamField body="zIndex" type="number" optional>
+      New stacking order.
+    </ParamField>
+    <ParamField body="visible" type="boolean" optional>
+      Show or hide the layer.
+    </ParamField>
+    <ParamField body="locked" type="boolean" optional>
+      Lock or unlock the layer in the editor.
+    </ParamField>
+    <ParamField body="contentJson" type="unknown" optional>
+      Replacement rich text content for text-bearing layers. Overwrites the entire stored content.
+    </ParamField>
+    <ParamField body="data" type="Record<string, unknown>" optional>
+      Replacement type-specific payload. Overwrites the entire `data` object.
+    </ParamField>
+    <ParamField body="style" type="Record<string, unknown>" optional>
+      Replacement style overrides. Overwrites the entire `style` object.
+    </ParamField>
+    <ParamField body="imageFill" type="LayerImageFill" optional>
+      Replacement picture fill: `{ url, attachmentId?, objectFit?, width?, height? }`.
+    </ParamField>
+    <ParamField body="metadata" type="LayerCompositionMetadata | null" optional>
+      AI brief and placeholder metadata. Pass `null` to clear. Contains `prompt`, `examples`, and placeholder slot fields used by the Ablo generation pipeline.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField body="options" type="RequestOptions" optional>
+  <Expandable title="options fields">
+    <ParamField body="wait" type="'queued' | 'confirmed'" optional default="confirmed">
+      Acknowledgement level to wait for.
+    </ParamField>
+    <ParamField body="idempotencyKey" type="string" optional>
+      Idempotency key for safe retries.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+### Returns
+
+<ResponseField name="id" type="string">The commit UUID.</ResponseField>
+<ResponseField name="status" type="'queued' | 'confirmed'">The acknowledgement level reached.</ResponseField>
+<ResponseField name="lastSyncId" type="number" optional>Monotonic sync cursor for real-time clients.</ResponseField>
+
+### Example
+
+```typescript
+// Move a layer and hide it in one commit
+const receipt = await ablo.layers.update({
+  id: 'layer_def456',
+  position: { x: 320, y: 200 },
+  visible: false,
+});
+
+console.log(receipt.status); // 'confirmed'
+```
+
+---
+
+## `ablo.layers.applyOp(id, op, options?)`
+
+Applies a typed operation to a chart, table, or text layer using a read-modify-write cycle. The SDK reads the layer's current document from the server, applies the op through the same reducers used by the editor and the AI, and writes only the changed fields back — so unrelated parts of the document are never overwritten.
+
+This method requires a readable client. If your client is commit-only, it throws with a clear error.
+
+### Parameters
+
+<ParamField path="id" type="string" required>
+  The layer id to modify.
+</ParamField>
+
+<ParamField body="op" type="LayerOp" required>
+  A typed operation. The op type must match the layer type:
+
+  <Expandable title="ChartOp — for chart layers">
+    A `ChartOperation` from the charts toolkit. Examples: add or remove a series, change chart type, update axis labels, set a color palette.
+  </Expandable>
+
+  <Expandable title="TableOp — for table layers">
+    A `TableOperation` from the tables toolkit. Examples: set a cell value, add or remove a row/column, apply cell styles, merge cells.
+  </Expandable>
+
+  <Expandable title="TextOp — for text layers">
+    A `TextStyleOperation` from the text-style toolkit. Examples: change font size, toggle bold, update text color, set alignment.
+  </Expandable>
+</ParamField>
+
+<ParamField body="options" type="RequestOptions" optional>
+  <Expandable title="options fields">
+    <ParamField body="wait" type="'queued' | 'confirmed'" optional default="confirmed">
+      Acknowledgement level to wait for.
+    </ParamField>
+    <ParamField body="idempotencyKey" type="string" optional>
+      Idempotency key for safe retries.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+### Returns
+
+<ResponseField name="id" type="string">The commit UUID.</ResponseField>
+<ResponseField name="status" type="'queued' | 'confirmed'">The acknowledgement level reached.</ResponseField>
+<ResponseField name="lastSyncId" type="number" optional>Monotonic sync cursor for real-time clients.</ResponseField>
+
+### Example
+
+```typescript
+// On first run, create the deck and capture the layer id
+const deck = await ablo.decks.create({
+  title: 'Live Dashboard',
+  slides: [
+    {
+      title: 'Revenue',
+      layers: [
+        {
+          type: 'table',
+          columns: ['Quarter', 'Revenue'],
+          rows: [['Q1', '$1.2M']],
+          at: { x: 160, y: 300, w: 1200, h: 400 },
+        },
+      ],
+    },
+  ],
+});
+
+const tableLayerId = deck.slides[0].layers[0].id;
+
+// On subsequent runs, apply a typed op to add a row — no full rewrite needed
+const receipt = await ablo.layers.applyOp(tableLayerId, {
+  type: 'insertRow',
+  index: 1,
+  cells: [{ value: 'Q2' }, { value: '$1.5M' }],
+});
+
+console.log(receipt.status); // 'confirmed'
+```
+
+---
+
+## `ablo.layers.delete(id, options?)`
+
+Permanently deletes a layer from its slide.
+
+### Parameters
+
+<ParamField path="id" type="string" required>
+  The layer id to delete.
+</ParamField>
+
+<ParamField body="options" type="RequestOptions" optional>
+  <Expandable title="options fields">
+    <ParamField body="wait" type="'queued' | 'confirmed'" optional default="confirmed">
+      Acknowledgement level to wait for.
+    </ParamField>
+    <ParamField body="idempotencyKey" type="string" optional>
+      Idempotency key for safe retries.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+### Returns
+
+<ResponseField name="id" type="string">The commit UUID.</ResponseField>
+<ResponseField name="status" type="'queued' | 'confirmed'">The acknowledgement level reached.</ResponseField>
+<ResponseField name="lastSyncId" type="number" optional>Monotonic sync cursor.</ResponseField>
+
+### Example
+
+```typescript
+const receipt = await ablo.layers.delete('layer_def456');
+console.log(receipt.status); // 'confirmed'
+```

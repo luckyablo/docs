@@ -1,0 +1,201 @@
+---
+title: "Layer Effects — Opacity, Shadows, Blur, and More"
+sidebarTitle: "Effects"
+description: "Control opacity, corner radius, CSS filters, vertical alignment, and stacked drop shadows on any layer using the typed effects field and shadow() builder."
+---
+
+Every layer in Ablo supports an `effects` field that controls its visual presentation independently of its content. You set opacity, round corners, apply CSS filters, align text vertically inside its box, and stack multiple drop shadows — all through a single typed object rather than an untyped style bag. Programmatic layers behave identically to ones produced by the editor.
+
+```typescript
+import { shadow } from '@abloatai/decks';
+```
+
+---
+
+## The effects object
+
+The `effects` field follows the `Effects` type, which is a strict object with five optional properties. You can set any combination of them; omitted fields have no effect on the layer.
+
+<ParamField path="opacity" type="number">
+  Layer opacity from `0` (fully transparent) to `1` (fully opaque). Applied to the entire layer including its fills, borders, and children.
+</ParamField>
+
+<ParamField path="borderRadius" type="number">
+  Corner radius in pixels. Useful for rounding the corners of rectangle shapes or clipping image layers. Must be `0` or greater.
+</ParamField>
+
+<ParamField path="filter" type="string">
+  A raw CSS `filter` value, applied verbatim to the layer. Use it for blur, brightness, contrast, or any other CSS filter function.
+</ParamField>
+
+<ParamField path="verticalAlign" type="'top' | 'middle' | 'bottom'">
+  Controls how a text layer's content is aligned vertically within its bounding box. Has no effect on non-text layers.
+</ParamField>
+
+<ParamField path="shadows" type="Shadow[]">
+  An ordered array of shadow entries. Shadows are rendered back-to-front, so the last entry in the array sits on top. Build each entry with the `shadow()` helper.
+</ParamField>
+
+---
+
+## shadow()
+
+`shadow(input?)` builds a single `Shadow` entry with sensible defaults. All parameters are optional — calling `shadow()` with no arguments produces a soft, mid-opacity drop shadow that works well on most content.
+
+<ParamField path="color" type="string">
+  Shadow color as any CSS color string. Defaults to `'rgba(0,0,0,0.25)'`.
+</ParamField>
+
+<ParamField path="offsetX" type="number">
+  Horizontal offset in pixels. Positive values push the shadow right, negative values push it left. Defaults to `0`.
+</ParamField>
+
+<ParamField path="offsetY" type="number">
+  Vertical offset in pixels. Positive values push the shadow down. Defaults to `4`.
+</ParamField>
+
+<ParamField path="blur" type="number">
+  Blur radius in pixels. Must be `0` or greater. Defaults to `12`.
+</ParamField>
+
+<ParamField path="spread" type="number">
+  Spread radius in pixels. Positive values expand the shadow; negative values shrink it. Defaults to `0`.
+</ParamField>
+
+<ParamField path="opacity" type="number">
+  Fractional opacity (`0`–`1`) applied on top of the `color` value. Defaults to `1`.
+</ParamField>
+
+<ParamField path="inset" type="boolean">
+  When `true`, renders the shadow as an inner shadow instead of a drop shadow. Defaults to `false`.
+</ParamField>
+
+---
+
+## Examples
+
+<Tabs>
+  <Tab title="Opacity + shadow">
+    Add a soft drop shadow and slight transparency to a heading layer.
+
+    ```typescript
+    {
+      type: 'text',
+      text: 'Hello',
+      style: 'h1',
+      effects: {
+        opacity: 0.9,
+        shadows: [
+          shadow({ color: 'rgba(0,0,0,0.3)', offsetX: 0, offsetY: 4, blur: 12 }),
+        ],
+      },
+      at: { x: 160, y: 120, w: 1600, h: 200 },
+    }
+    ```
+  </Tab>
+
+  <Tab title="Rounded image">
+    Clip an image layer to a pill shape with rounded corners and a subtle shadow.
+
+    ```typescript
+    {
+      type: 'image',
+      url: 'https://cdn.example.com/avatar.png',
+      effects: {
+        borderRadius: 24,
+        shadows: [
+          shadow({ color: 'rgba(91,76,245,0.25)', offsetY: 8, blur: 24, spread: -4 }),
+        ],
+      },
+      at: { x: 800, y: 300, w: 320, h: 320 },
+    }
+    ```
+  </Tab>
+
+  <Tab title="Stacked shadows">
+    Layer two shadows — one tight and dark for depth, one wide and light for a glow effect.
+
+    ```typescript
+    {
+      type: 'text',
+      text: 'Feature launch',
+      style: 'title',
+      effects: {
+        shadows: [
+          // Depth shadow
+          shadow({ color: 'rgba(0,0,0,0.4)', offsetY: 2, blur: 6 }),
+          // Glow halo
+          shadow({ color: 'rgba(91,76,245,0.5)', offsetY: 0, blur: 40, spread: 4 }),
+        ],
+      },
+      at: { x: 160, y: 400, w: 1600, h: 200 },
+    }
+    ```
+  </Tab>
+
+  <Tab title="CSS filter">
+    Apply a blur filter to a shape layer to create a frosted-glass effect behind content.
+
+    ```typescript
+    {
+      type: 'shape',
+      shape: 'rectangle',
+      fills: [solidFill('rgba(255,255,255,0.15)')],
+      effects: {
+        filter: 'blur(20px)',
+        borderRadius: 16,
+      },
+      at: { x: 120, y: 120, w: 800, h: 400 },
+    }
+    ```
+  </Tab>
+
+  <Tab title="Vertical alignment">
+    Pin a text layer's content to the bottom of its bounding box.
+
+    ```typescript
+    {
+      type: 'text',
+      text: 'Slide caption',
+      style: 'caption',
+      effects: {
+        verticalAlign: 'bottom',
+        opacity: 0.7,
+      },
+      at: { x: 160, y: 800, w: 1600, h: 200 },
+    }
+    ```
+  </Tab>
+</Tabs>
+
+---
+
+## Combining effects
+
+All five properties work together on the same layer. The order of composition is: CSS filter is applied first (to the layer pixels), then border radius clips the result, then shadows are painted outside the clipped shape, and finally opacity fades the entire composited layer.
+
+```typescript
+import { shadow, solidFill, shape } from '@abloatai/decks';
+
+// A card layer: rounded, elevated with a shadow, slightly transparent
+const card = shape({
+  shape: 'rectangle',
+  fills: [solidFill('var(--slide-card)')],
+  effects: {
+    opacity: 0.95,
+    borderRadius: 20,
+    shadows: [
+      shadow({ color: 'rgba(0,0,0,0.08)', offsetY: 2,  blur: 8  }),
+      shadow({ color: 'rgba(0,0,0,0.12)', offsetY: 8,  blur: 24 }),
+      shadow({ color: 'rgba(0,0,0,0.06)', offsetY: 16, blur: 48 }),
+    ],
+  },
+  at: { x: 200, y: 200, w: 740, h: 480 },
+});
+```
+
+<Note>
+  `shadow()` fills in all unspecified fields with their defaults, so you only need to write
+  the values that differ from the baseline. `shadow({})` and `shadow()` produce the same
+  result: a `0 4px 12px rgba(0,0,0,0.25)` drop shadow.
+</Note>

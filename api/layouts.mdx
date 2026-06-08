@@ -1,0 +1,367 @@
+---
+title: "Layouts API — Reusable Slide Templates and Slots"
+sidebarTitle: "Layouts"
+description: "Create reusable slide layout templates with named placeholder slots, then stamp out fully filled slides from those templates in one atomic commit."
+---
+
+Layouts let you define a slide template once — static chrome, branded shapes, and named placeholder slots — and then stamp out slides from that template by filling each slot with live content. A layout belongs to a **layout container** (identified by `layoutId`, which is a property of the deck). When you mark a layout as a master, every other layout in the same container inherits its layers automatically, giving you a global chrome layer (logo, page number, background) that propagates across all slides.
+
+---
+
+## `ablo.layouts.create(params, options?)` → `LayoutResource`
+
+Creates a new layout template, minting ids for each layer and returning the full placeholder map so you can immediately pass the result to `createSlide`.
+
+```typescript
+const layout = await ablo.layouts.create({
+  layoutId: deck.layoutId,
+  name: 'Title Slide',
+  background: solidBackground('#0F172A'),
+  layers: [
+    {
+      type: 'image',
+      url: 'https://cdn.example.com/logo.svg',
+      at: { x: 80, y: 60, w: 200, h: 60 },
+      placeholder: 'logo',
+    },
+    {
+      type: 'text',
+      text: 'Slide title',
+      style: 'title',
+      at: { x: 160, y: 380, w: 1600, h: 160 },
+      placeholder: { name: 'heading', type: 'title', text: 'Enter a title' },
+    },
+    {
+      type: 'text',
+      text: 'Subtitle',
+      style: 'h3',
+      at: { x: 160, y: 560, w: 1200, h: 80 },
+      placeholder: 'subtitle',
+    },
+  ],
+});
+```
+
+<ParamField path="params.layoutId" type="string" required>
+  The id of the layout **container** — the `layoutId` field returned on a `DeckResource`. Every slide layout belongs to a container, and a deck references one container.
+</ParamField>
+
+<ParamField path="params.name" type="string" required>
+  Human-readable name shown in the editor's template picker.
+</ParamField>
+
+<ParamField path="params.background" type="SlideBackgroundInput">
+  Background applied to every slide that uses this layout. Accepts the same value as a slide's own `background` field — a color string, a background builder result (`solidBackground`, `gradientBackground`), or a raw CSS string. Slide-level backgrounds override this.
+</ParamField>
+
+<ParamField path="params.master" type="boolean">
+  When `true`, this layout becomes the master of its container. Its layers are inherited by every other layout in the same container. Use the master for global chrome (logo, footer bar, slide number) that should appear on every slide.
+</ParamField>
+
+<ParamField path="params.layers" type="LayoutLayerInput[]">
+  The template's layers. Each entry is a standard `LayerInput` (see [LayerInput reference](/api/layer-input)) extended with an optional `placeholder` field.
+
+  <Expandable title="LayoutLayerInput fields">
+    <ParamField path="placeholder" type="string | PlaceholderSpec">
+      Names this layer as a fillable slot. Pass a bare string for just a name, or a `PlaceholderSpec` object for full control.
+
+      <Expandable title="PlaceholderSpec fields">
+        <ParamField path="name" type="string" required>
+          The stable slot identity — the key you use when calling `createSlide({ fill: { [name]: content } })`. Unique within the layout.
+        </ParamField>
+        <ParamField path="type" type="PlaceholderType">
+          The slot kind — influences render behaviour and master inheritance deduplication. When omitted, the type is inferred from the layer's content type (`image` → `'image'`, `chart` → `'chart'`, `table` → `'table'`, `text` → `'body'`, everything else → `'other'`).
+        </ParamField>
+        <ParamField path="text" type="string">
+          User-facing hint displayed in the empty slot in the editor. Defaults to the placeholder name.
+        </ParamField>
+      </Expandable>
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField path="options" type="RequestOptions">
+  Per-call commit controls. See [RequestOptions](/api/types#requestoptions).
+</ParamField>
+
+**Returns `LayoutResource`**
+
+<ResponseField name="id" type="string">
+  The layout's id.
+</ResponseField>
+
+<ResponseField name="name" type="string">
+  The name you provided.
+</ResponseField>
+
+<ResponseField name="layoutId" type="string">
+  The container this layout belongs to.
+</ResponseField>
+
+<ResponseField name="layers" type="{ id: string; type: string }[]">
+  The ids and types of the created layers, in input order.
+</ResponseField>
+
+<ResponseField name="placeholders" type="Record<string, LayoutPlaceholder>">
+  A map from placeholder name to slot metadata. Pass this directly to `createSlide`.
+
+  <Expandable title="LayoutPlaceholder fields">
+    <ResponseField name="layoutLayerId" type="string">
+      The id of the layout layer backing this slot.
+    </ResponseField>
+    <ResponseField name="type" type="string">
+      The slot kind (inferred or explicit).
+    </ResponseField>
+    <ResponseField name="position" type="LayerPosition">
+      Geometry of the slot in 1920×1080 slide space.
+    </ResponseField>
+    <ResponseField name="text" type="string">
+      User-facing hint for the empty slot.
+    </ResponseField>
+    <ResponseField name="prompt" type="string">
+      AI brief — what to generate for this slot.
+    </ResponseField>
+    <ResponseField name="examples" type="string[]">
+      Sample outputs for AI generation.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+---
+
+## `ablo.layouts.createSlide(layout, params, options?)` → `SlideResource`
+
+Creates a slide on a layout and fills its placeholder slots by name, all in one atomic commit. The `layout` argument is the `LayoutResource` returned by `layouts.create` — it carries the placeholder map the method needs to resolve slot names to layer ids.
+
+```typescript
+const slide = await ablo.layouts.createSlide(layout, {
+  deckId: deck.id,
+  order: 0,
+  title: 'Q3 Results',
+  fill: {
+    heading: text('Q3 2024 Results', { style: 'title' }),
+    subtitle: text('Revenue up 40% year-over-year'),
+    logo: image('https://cdn.example.com/logo-dark.svg'),
+  },
+});
+```
+
+<ParamField path="layout" type="LayoutResource" required>
+  The `LayoutResource` returned by `layouts.create`. The method reads `layout.placeholders` to resolve each fill key to the correct layout layer.
+</ParamField>
+
+<ParamField path="params.deckId" type="string" required>
+  The deck this slide belongs to.
+</ParamField>
+
+<ParamField path="params.order" type="number" required>
+  Zero-based position of the slide in the deck.
+</ParamField>
+
+<ParamField path="params.title" type="string">
+  Slide title (shown in the editor's slide list).
+</ParamField>
+
+<ParamField path="params.fill" type="Record<string, LayerContent>">
+  A map from placeholder name to content. Keys must match placeholder names on `layout.placeholders`. Values are `LayerContent` objects — the return value of any content builder: `text()`, `bullets()`, `barChart()`, `table()`, `image()`, and so on. Unmentioned placeholders remain empty.
+</ParamField>
+
+<ParamField path="options" type="RequestOptions">
+  Per-call commit controls.
+</ParamField>
+
+**Returns `SlideResource`** — `{ id, deckId, title, order }`.
+
+---
+
+## `ablo.layouts.addLayer(slideLayoutId, layer, options?)` → `{ id, type }`
+
+Adds a single layer to an existing layout. Use this to evolve a template without recreating it. The `layer` argument accepts the same `LayoutLayerInput` shape as `layouts.create`, so you can add a placeholder layer after the fact.
+
+```typescript
+const layer = await ablo.layouts.addLayer(layout.id, {
+  type: 'shape',
+  shape: 'rectangle',
+  fills: [solidFill('#1E293B')],
+  at: { x: 0, y: 1020, w: 1920, h: 60 },
+});
+```
+
+<ParamField path="slideLayoutId" type="string" required>
+  The id of the layout to add the layer to.
+</ParamField>
+
+<ParamField path="layer" type="LayoutLayerInput" required>
+  The layer to add. Any valid `LayerInput` extended with an optional `placeholder` spec.
+</ParamField>
+
+<ParamField path="options" type="RequestOptions">
+  Per-call commit controls.
+</ParamField>
+
+**Returns** `{ id: string; type: string }` — the minted layer id and its type.
+
+---
+
+## `ablo.layouts.deleteLayer(id, options?)` → `CommitReceipt`
+
+Removes a layer from a layout by the layer's id. Slides that inherited the layer will no longer render it.
+
+<ParamField path="id" type="string" required>
+  The layout layer id to delete.
+</ParamField>
+
+<ParamField path="options" type="RequestOptions">
+  Per-call commit controls.
+</ParamField>
+
+---
+
+## `ablo.layouts.retrieve(id)` → `LayoutRecord`
+
+Fetches the stored `LayoutRecord` for the given layout id. Requires a readable client.
+
+<ParamField path="id" type="string" required>
+  The layout id to retrieve.
+</ParamField>
+
+**Returns `LayoutRecord`** — `{ id, name, layoutId, settings }`. See [LayoutRecord](/api/types#layoutrecord).
+
+---
+
+## `ablo.layouts.update(params, options?)` → `CommitReceipt`
+
+Renames a layout or changes its background.
+
+```typescript
+await ablo.layouts.update({
+  id: layout.id,
+  name: 'Title Slide v2',
+  background: solidBackground('#1E293B'),
+});
+```
+
+<ParamField path="params.id" type="string" required>
+  The layout to update.
+</ParamField>
+
+<ParamField path="params.name" type="string">
+  New name for the layout.
+</ParamField>
+
+<ParamField path="params.background" type="SlideBackgroundInput">
+  New background — same type as the `create` background field.
+</ParamField>
+
+<ParamField path="options" type="RequestOptions">
+  Per-call commit controls.
+</ParamField>
+
+---
+
+## `ablo.layouts.delete(id, options?)` → `CommitReceipt`
+
+Deletes a layout. Slides that reference this layout as their template will lose the layout chrome.
+
+<ParamField path="id" type="string" required>
+  The layout id to delete.
+</ParamField>
+
+<ParamField path="options" type="RequestOptions">
+  Per-call commit controls.
+</ParamField>
+
+---
+
+## Complete layout workflow example
+
+The following example creates a branded layout container (master + content template), then stamps out two slides by filling the placeholders.
+
+```typescript
+import Decks, { text, bullets, barChart, image, solidFill } from '@abloatai/decks';
+
+const ablo = new Decks(process.env.ABLO_API_KEY!);
+
+// 1. Create the deck — this mints a layoutId container automatically.
+const deck = await ablo.decks.create({ title: 'Q3 Investor Update' });
+
+// 2. Create a master layout — global chrome inherited by all other layouts.
+const master = await ablo.layouts.create({
+  layoutId: deck.layoutId!,
+  name: 'Master',
+  master: true,
+  layers: [
+    {
+      type: 'image',
+      url: 'https://cdn.example.com/logo.svg',
+      at: { x: 80, y: 30, w: 180, h: 54 },
+    },
+    {
+      type: 'shape',
+      shape: 'rectangle',
+      fills: [solidFill('#0F172A')],
+      at: { x: 0, y: 1020, w: 1920, h: 60 },
+    },
+  ],
+});
+
+// 3. Create a content layout with placeholder slots.
+const contentLayout = await ablo.layouts.create({
+  layoutId: deck.layoutId!,
+  name: 'Content — Chart',
+  layers: [
+    {
+      type: 'text',
+      text: 'Slide title',
+      style: 'h1',
+      at: { x: 160, y: 80, w: 1440, h: 120 },
+      placeholder: { name: 'heading', type: 'title', text: 'Enter a slide title' },
+    },
+    {
+      type: 'bar',
+      data: [{ label: 'Example', value: 100 }],
+      at: { x: 160, y: 240, w: 1600, h: 720 },
+      placeholder: { name: 'chart', type: 'chart', text: 'Insert chart data' },
+    },
+  ],
+});
+
+// 4. Stamp out slides by filling the placeholders.
+const revenueSlide = await ablo.layouts.createSlide(contentLayout, {
+  deckId: deck.id,
+  order: 0,
+  title: 'Revenue',
+  fill: {
+    heading: text('Revenue Growth'),
+    chart: barChart({
+      data: [
+        { label: 'Q1', value: 2.1 },
+        { label: 'Q2', value: 2.8 },
+        { label: 'Q3', value: 3.4 },
+      ],
+      valueFormat: '$0.0"M"',
+      dataLabels: true,
+    }),
+  },
+});
+
+const usersSlide = await ablo.layouts.createSlide(contentLayout, {
+  deckId: deck.id,
+  order: 1,
+  title: 'Active Users',
+  fill: {
+    heading: text('Monthly Active Users'),
+    chart: barChart({
+      data: [
+        { label: 'Q1', value: 18400 },
+        { label: 'Q2', value: 24100 },
+        { label: 'Q3', value: 31700 },
+      ],
+      valueFormat: '0,0',
+      cagrArrow: true,
+    }),
+  },
+});
+
+console.log('Slides created:', revenueSlide.id, usersSlide.id);
+```

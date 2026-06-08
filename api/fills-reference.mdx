@@ -1,0 +1,389 @@
+---
+title: "Fills Reference — All Shape Fill Builder Functions"
+sidebarTitle: "Fills Reference"
+description: "Complete reference for all fill builder functions — solid, linear gradient, radial gradient, mesh gradient, image fill, and animated shader fills."
+---
+
+The fills API lets you apply rich, layered backgrounds to any shape layer. A shape's `fills` field accepts an array of `Fill` objects rendered bottom-to-top as CSS background layers — the same stacking model as Figma. Each builder function produces one valid `Fill`. Import the builders you need directly from `@abloatai/decks`.
+
+```typescript
+import {
+  solidFill,
+  linearGradient,
+  radialGradient,
+  meshGradient,
+  imageFill,
+  shaderFill,
+} from '@abloatai/decks';
+```
+
+---
+
+## Fill builders
+
+### `solidFill(color, opacity?)`
+
+A flat solid color fill.
+
+```typescript
+function solidFill(color: string, opacity?: number): Fill
+```
+
+<ParamField path="color" type="string" required>
+  Any CSS color value: hex (`'#3B82F6'`), `rgb()`, `hsl()`, a named color, or a theme CSS variable (`'var(--slide-brand)'`).
+</ParamField>
+<ParamField path="opacity" type="number" default="1">
+  Fill opacity from `0` (fully transparent) to `1` (fully opaque).
+</ParamField>
+
+```typescript
+solidFill('#0F172A')
+solidFill('var(--slide-brand)', 0.9)
+```
+
+---
+
+### `linearGradient(stops, opts?)`
+
+A linear gradient compiled to a `linear-gradient()` CSS string.
+
+```typescript
+function linearGradient(
+  stops: GradientStop[],
+  opts?: { angle?: number; opacity?: number }
+): Fill
+```
+
+<ParamField path="stops" type="GradientStop[]" required>
+  Color stops along the gradient axis. Each stop has a `color` and an optional `at` position (0–1, where 0 = 0% and 1 = 100%). Stops without `at` are distributed automatically by CSS.
+
+  <Expandable title="GradientStop fields">
+    <ParamField path="color" type="string" required>CSS color value.</ParamField>
+    <ParamField path="at" type="number">Position on the gradient axis from `0` to `1`.</ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField path="opts.angle" type="number" default="180">
+  Gradient direction in degrees. `0` = bottom to top, `90` = left to right, `180` (default) = top to bottom, `135` = diagonal top-left to bottom-right.
+</ParamField>
+<ParamField path="opts.opacity" type="number" default="1">
+  Overall fill opacity.
+</ParamField>
+
+```typescript
+linearGradient(
+  [{ color: '#667EEA', at: 0 }, { color: '#764BA2', at: 1 }],
+  { angle: 135 }
+)
+
+linearGradient([{ color: '#0F172A' }, { color: '#1E3A5F' }])
+```
+
+---
+
+### `radialGradient(stops, opts?)`
+
+A radial gradient compiled to a `radial-gradient()` CSS string.
+
+```typescript
+function radialGradient(
+  stops: GradientStop[],
+  opts?: { at?: [number, number]; opacity?: number }
+): Fill
+```
+
+<ParamField path="stops" type="GradientStop[]" required>
+  Color stops — same shape as `linearGradient` stops.
+</ParamField>
+<ParamField path="opts.at" type="[number, number]">
+  Center of the radial gradient as `[x, y]` in 0–1 coordinates relative to the box. Default is the box center (`[0.5, 0.5]`).
+</ParamField>
+<ParamField path="opts.opacity" type="number" default="1">
+  Overall fill opacity.
+</ParamField>
+
+```typescript
+radialGradient(
+  [{ color: '#3B82F6', at: 0 }, { color: '#0F172A', at: 1 }],
+  { at: [0.3, 0.3] }
+)
+```
+
+---
+
+### `meshGradient(points, opts?)`
+
+A mesh gradient — multiple stacked radial blobs that blend together into a soft, organic gradient. Each point is a colored glow positioned on the box in 0–1 coordinates.
+
+```typescript
+function meshGradient(
+  points: MeshPoint[],
+  opts?: { background?: string; opacity?: number }
+): Fill
+```
+
+<ParamField path="points" type="MeshPoint[]" required>
+  The gradient blobs. Each point has a color, a 2D position, and an optional radius.
+
+  <Expandable title="MeshPoint fields">
+    <ParamField path="color" type="string" required>Color of this blob.</ParamField>
+    <ParamField path="at" type="[number, number]" required>Position `[x, y]` in 0–1 coordinates relative to the box.</ParamField>
+    <ParamField path="radius" type="number" default="0.5">Soft-glow radius as a fraction of the box. Larger values create wider blobs.</ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField path="opts.background" type="string">
+  A base color or gradient string rendered behind all the blobs. If omitted, the mesh is transparent where no blobs overlap.
+</ParamField>
+<ParamField path="opts.opacity" type="number" default="1">
+  Overall fill opacity.
+</ParamField>
+
+```typescript
+meshGradient(
+  [
+    { at: [0.1, 0.2], color: 'var(--slide-brand)',       radius: 0.6 },
+    { at: [0.8, 0.1], color: '#6EE7F9',                  radius: 0.5 },
+    { at: [0.5, 0.8], color: 'var(--slide-brand-light)', radius: 0.7 },
+    { at: [0.9, 0.7], color: '#A78BFA',                  radius: 0.4 },
+  ],
+  { background: '#0F172A' }
+)
+```
+
+---
+
+### `imageFill(url, opts?)`
+
+An image fill applied to a shape box. Use `ablo.images.upload()` to get a CDN URL for local files.
+
+```typescript
+function imageFill(
+  url: string,
+  opts?: { objectFit?: 'cover' | 'contain' | 'fill'; opacity?: number }
+): Fill
+```
+
+<ParamField path="url" type="string" required>
+  A hosted image URL. External URLs are rehosted to the Ablo CDN at commit time. Use `ablo.images.upload()` for local files.
+</ParamField>
+<ParamField path="opts.objectFit" type="'cover' | 'contain' | 'fill'" default="'cover'">
+  How the image fills the shape box. `'cover'` crops to fill; `'contain'` letterboxes; `'fill'` stretches.
+</ParamField>
+<ParamField path="opts.opacity" type="number" default="1">
+  Overall fill opacity. Combine with a `solidFill` tint above it in the stack for a color wash effect.
+</ParamField>
+
+```typescript
+imageFill('https://cdn.example.com/texture.jpg', { objectFit: 'cover' })
+
+// Semi-transparent image with a tint above it
+fills: [
+  imageFill('https://cdn.example.com/hero.jpg'),
+  solidFill('#0F172A', 0.5),           // tint layer on top
+]
+```
+
+---
+
+### `shaderFill(input, opacity?)`
+
+An animated WebGL shader gradient. Runs in the browser via `@shadergradient` — renders as a static snapshot in exported images.
+
+```typescript
+function shaderFill(
+  input: {
+    preset: ShaderPreset;
+    colors: { color1: string; color2: string; color3: string };
+    speed?: number;
+    density?: number;
+    animate?: boolean;
+  },
+  opacity?: number
+): Fill
+```
+
+<ParamField path="input.preset" type="ShaderPreset" required>
+  The shader algorithm preset. See [ShaderPreset](#shaderpreset) values below.
+</ParamField>
+<ParamField path="input.colors" type="{ color1, color2, color3 }" required>
+  The three colors the shader mixes. All three are required. Accepts any CSS color value.
+</ParamField>
+<ParamField path="input.speed" type="number" default="0.2">
+  Animation speed multiplier. `0` = frozen, `1` = fast.
+</ParamField>
+<ParamField path="input.density" type="number" default="1.3">
+  Wave / noise density. Higher values produce finer detail.
+</ParamField>
+<ParamField path="input.animate" type="boolean" default="true">
+  When `false`, the shader renders as a static frame — useful for exported images.
+</ParamField>
+<ParamField path="opacity" type="number" default="1">
+  Overall fill opacity.
+</ParamField>
+
+```typescript
+shaderFill({
+  preset: 'aurora',
+  colors: {
+    color1: '#3B82F6',
+    color2: '#8B5CF6',
+    color3: '#0F172A',
+  },
+  speed: 0.3,
+  animate: true,
+})
+```
+
+---
+
+## Types
+
+### `Fill`
+
+The output of every builder function — one entry in a layer's `fills` stack.
+
+<ResponseField name="type" type="FillType">Fill kind: `'solid'` | `'gradient'` | `'image'` | `'shader'`.</ResponseField>
+<ResponseField name="visible" type="boolean">Whether this fill layer renders. Always `true` from builders; toggle it to temporarily hide a fill.</ResponseField>
+<ResponseField name="opacity" type="number">Fill opacity from `0` to `1`.</ResponseField>
+<ResponseField name="color" type="string">Present on `solid` fills.</ResponseField>
+<ResponseField name="gradient" type="string">Present on `gradient` fills — the compiled CSS `linear-gradient()` or `radial-gradient()` string.</ResponseField>
+<ResponseField name="imageFill" type="object">Present on `image` fills — `{ url, objectFit?, width?, height? }`.</ResponseField>
+<ResponseField name="shader" type="object">Present on `shader` fills — `{ version, preset, colors, uSpeed, uDensity, animate }`.</ResponseField>
+
+### `FillType`
+
+```typescript
+type FillType = 'solid' | 'gradient' | 'image' | 'shader';
+```
+
+### `ShaderPreset`
+
+```typescript
+type ShaderPreset =
+  | 'aurora'      // Cool blue-green northern lights
+  | 'ocean'       // Deep blue wave motion
+  | 'sunset'      // Warm orange-pink horizon
+  | 'ember'       // Red-orange fire glow
+  | 'midnight'    // Dark purple-blue depth
+  | 'mint'        // Cool green-white freshness
+  | 'candy'       // Pastel pink-purple pop
+  | 'custom';     // Custom color mix with aurora algorithm
+```
+
+### `GradientStop`
+
+```typescript
+interface GradientStop {
+  color: string;   // CSS color value
+  at?:   number;   // Position 0–1 (omit for CSS auto-distribution)
+}
+```
+
+### `MeshPoint`
+
+```typescript
+interface MeshPoint {
+  color:   string;              // CSS color value
+  at:      [number, number];   // [x, y] position in 0–1 box coordinates
+  radius?: number;              // Soft-glow radius fraction (default 0.5)
+}
+```
+
+---
+
+## Multi-fill example
+
+This example stacks fills to create a layered hero card — textured image base, dark tint, and a brand glow.
+
+```typescript
+import Decks, {
+  solidFill,
+  linearGradient,
+  meshGradient,
+  imageFill,
+  shaderFill,
+} from '@abloatai/decks';
+
+const ablo = new Decks(process.env.ABLO_API_KEY!);
+
+await ablo.decks.create({
+  title: 'Fills Demo',
+  slides: [
+    {
+      title: 'Hero — layered fills',
+      layers: [
+        // Full-bleed hero card with three stacked fills
+        {
+          type: 'shape',
+          shape: 'rectangle',
+          fills: [
+            // 1. Texture base (bottom)
+            imageFill('https://cdn.example.com/grain.png', { objectFit: 'cover', opacity: 0.15 }),
+            // 2. Mesh gradient over the texture
+            meshGradient(
+              [
+                { at: [0.1, 0.1], color: '#1E40AF', radius: 0.7 },
+                { at: [0.9, 0.2], color: '#7C3AED', radius: 0.6 },
+                { at: [0.5, 0.9], color: '#0E7490', radius: 0.5 },
+              ],
+              { background: '#0F172A' }
+            ),
+          ],
+          radius: 24,
+          at: { x: 80, y: 80, w: 1760, h: 920 },
+          z: 0,
+        },
+
+        // Animated shader background (full slide)
+        {
+          type: 'shape',
+          shape: 'rectangle',
+          fills: [
+            shaderFill(
+              {
+                preset: 'aurora',
+                colors: { color1: '#3B82F6', color2: '#8B5CF6', color3: '#0F172A' },
+                speed: 0.2,
+                animate: true,
+              },
+              0.4   // 40% opacity — blends with the card above
+            ),
+          ],
+          at: { x: 0, y: 0, w: 1920, h: 1080 },
+          z: -1,
+        },
+
+        // Diagonal gradient badge
+        {
+          type: 'shape',
+          shape: 'rectangle',
+          fills: [
+            linearGradient(
+              [{ color: '#3B82F6', at: 0 }, { color: '#8B5CF6', at: 1 }],
+              { angle: 135 }
+            ),
+          ],
+          radius: 8,
+          at: { x: 160, y: 880, w: 240, h: 56 },
+          z: 2,
+        },
+
+        // Radial spotlight
+        {
+          type: 'shape',
+          shape: 'circle',
+          fills: [
+            radialGradient(
+              [{ color: '#BFDBFE', at: 0 }, { color: 'transparent', at: 1 }],
+              { at: [0.5, 0.5], opacity: 0.12 }
+            ),
+          ],
+          at: { x: 700, y: 200, w: 520, h: 520 },
+          z: 1,
+        },
+      ],
+    },
+  ],
+});
+```

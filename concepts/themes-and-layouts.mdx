@@ -1,0 +1,343 @@
+---
+title: "Themes and Layouts: Styling and Templates"
+sidebarTitle: "Themes & Layouts"
+description: "Learn how to apply consistent color and font themes across a deck, and how to build reusable layout templates with named placeholder slots."
+---
+
+Themes and layouts are the two tools the SDK gives you for consistency at scale. A theme controls the color palette and fonts across every slide in a deck — change the theme and all slides update together. A layout is a reusable slide template: static chrome elements like logos and backgrounds live in the layout, while named placeholder slots mark where variable content goes. You fill those slots per slide when you create it.
+
+---
+
+## Themes
+
+A theme is a set of CSS `:root` custom properties — `--slide-*` variables — that the renderer applies to every slide in a deck. You define a theme once, apply it to a deck, and from that point every layer that references a theme token (like `var(--slide-brand)`) picks up the right color and font automatically.
+
+### Creating a theme
+
+You can create a theme with structured `colors` and `fonts` objects, or by writing raw CSS if you need full control.
+
+<Tabs>
+  <Tab title="Structured (recommended)">
+    Pass `colors` and `fonts` to `themes.create()`. The SDK compiles them into a complete `:root` block with all `--slide-*` variables and typography defaults baked in.
+
+    ```typescript
+    import { Decks } from '@abloatai/decks';
+
+    const ablo = new Decks(process.env.ABLO_API_KEY);
+
+    const theme = await ablo.themes.create({
+      name: 'Midnight Brand',
+      colors: {
+        brand:      '#5B4CF5',   // primary accent
+        brandLight: '#EEF0FF',   // lighter tint of the accent
+        textColor:  '#0A0F1E',   // main body text
+        textMuted:  '#6B7280',   // secondary/muted text
+        surface:    '#FFFFFF',   // slide background
+        card:       '#F9FAFB',   // card / panel backgrounds
+        border:     '#E5E7EB',   // dividers and borders
+      },
+      fonts: {
+        heading: 'Inter',        // used for titles and headings
+        body:    'Inter',        // used for body copy
+      },
+    });
+
+    console.log(theme.id);
+    ```
+  </Tab>
+  <Tab title="Raw CSS">
+    Pass a raw `css` string when you need to set variables that the structured builder doesn't expose, or when you already have a CSS theme from another tool.
+
+    ```typescript
+    const theme = await ablo.themes.create({
+      name: 'Custom Brand',
+      css: `
+        :root {
+          --slide-brand:      #E34234;
+          --slide-brand-light:#FDE8E6;
+          --slide-text-color: #111111;
+          --slide-text-muted: #666666;
+          --slide-surface:    #FFFFFF;
+          --slide-card:       #F5F5F5;
+          --slide-border:     #DDDDDD;
+          --slide-font-heading: 'Playfair Display';
+          --slide-font-body:    'Source Sans Pro';
+        }
+      `,
+    });
+    ```
+  </Tab>
+</Tabs>
+
+### Applying a theme to a deck
+
+Use `applyTo` in the `themes.create()` call to attach the theme to a deck in one atomic operation:
+
+```typescript
+const theme = await ablo.themes.create({
+  name: 'Q3 Report',
+  colors: { brand: '#5B4CF5', brandLight: '#EEF0FF', textColor: '#0A0F1E',
+            textMuted: '#6B7280', surface: '#FFFFFF', card: '#F9FAFB', border: '#E5E7EB' },
+  fonts:  { heading: 'Inter', body: 'Inter' },
+  applyTo: deck.id,   // atomic: theme created AND applied in one request
+});
+```
+
+Or apply a theme to an existing deck by updating it:
+
+```typescript
+await ablo.decks.update({ id: deck.id, themeId: theme.id });
+```
+
+### Theme color tokens
+
+The SDK exports a `colorRef()` helper that resolves a token name to the corresponding CSS variable string. Use it anywhere a layer field accepts a color value — `fill`, `color`, `backgroundColor`, and so on — to bind the layer to the theme rather than hard-coding a hex value.
+
+```typescript
+import { colorRef } from '@abloatai/decks';
+
+colorRef('brand')      // → 'var(--slide-brand)'
+colorRef('brandLight') // → 'var(--slide-brand-light)'
+colorRef('surface')    // → 'var(--slide-surface)'
+colorRef('card')       // → 'var(--slide-card)'
+colorRef('border')     // → 'var(--slide-border)'
+colorRef('text')       // → 'var(--slide-text-color)'
+colorRef('textMuted')  // → 'var(--slide-text-muted)'
+```
+
+Use it in a layer:
+
+```typescript
+{
+  type: 'shape',
+  shape: 'rectangle',
+  fill: colorRef('brand'),   // picks up --slide-brand at render time
+  at: { x: 0, y: 0, w: 1920, h: 8 },
+}
+```
+
+### Theme tokens reference
+
+<CardGroup cols={2}>
+  <Card title="Color tokens" icon="palette">
+    | Token | CSS variable |
+    |-------|-------------|
+    | `brand` | `--slide-brand` |
+    | `brandLight` | `--slide-brand-light` |
+    | `surface` | `--slide-surface` |
+    | `card` | `--slide-card` |
+    | `border` | `--slide-border` |
+    | `text` | `--slide-text-color` |
+    | `textMuted` | `--slide-text-muted` |
+  </Card>
+  <Card title="Font tokens" icon="font">
+    | Token | CSS variable |
+    |-------|-------------|
+    | `title` | `--slide-font-title` |
+    | `heading` | `--slide-font-heading` |
+    | `body` | `--slide-font-body` |
+
+    The `heading` and `body` tokens are set via the `fonts.heading` and `fonts.body` fields in the structured theme spec. The `title` token can be set independently in raw CSS when the title style requires a different font family. You reference font tokens indirectly through the `style` field on text layers — `style: 'title'` uses `--slide-font-title`, `style: 'h1'` uses `--slide-font-heading`, `style: 'body1'` uses `--slide-font-body`.
+  </Card>
+</CardGroup>
+
+---
+
+## Layouts
+
+A layout is a reusable slide template. It contains static chrome — a background, logo, decorative shapes — alongside named placeholder slots. Each placeholder marks a region where variable content goes. When you create a slide from a layout, you fill the placeholders by name and the SDK merges the static chrome and the filled content into a single request.
+
+### Creating a layout
+
+Call `ablo.layouts.create()` with the `layoutId` of the container (the same `layoutId` you'd assign to a deck), a `name`, and a `layers` array. Any layer that should be a placeholder gets a `placeholder` field — either a bare name string or a `PlaceholderSpec` object.
+
+```typescript
+const layout = await ablo.layouts.create({
+  layoutId: 'lyt_container_abc123',   // the Layout container this template belongs to
+  name: 'Title Slide',
+  background: '#0A0F1E',
+  layers: [
+    // Static chrome — the Ablo logo in the corner
+    {
+      type: 'image',
+      url: 'https://cdn.example.com/logo-white.svg',
+      at: { x: 80, y: 48, w: 160, h: 48 },
+    },
+    // Placeholder — the slide headline
+    {
+      type: 'text',
+      text: 'Slide title',
+      style: 'title',
+      color: '#FFFFFF',
+      at: { x: 160, y: 380, w: 1600, h: 220 },
+      placeholder: 'title',           // bare string → name: 'title'
+    },
+    // Placeholder — a subtitle with an AI brief
+    {
+      type: 'text',
+      text: 'Subtitle or date',
+      style: 'h3',
+      color: '#9B8FFE',
+      at: { x: 160, y: 620, w: 1200, h: 100 },
+      placeholder: {
+        name:   'subtitle',
+        type:   'body',               // 'image' | 'chart' | 'table' | 'body' | 'other'
+        text:   'Enter a subtitle',   // user-facing hint shown in the empty slot
+      },
+    },
+  ],
+});
+
+// layout.placeholders['title'].layoutLayerId — needed to fill it
+// layout.placeholders['subtitle'].layoutLayerId
+```
+
+### Placeholder types
+
+The `type` field in a `PlaceholderSpec` describes the kind of content the slot expects. It drives how the renderer displays the empty slot and how master layout inheritance works (a layout's `title` placeholder covers the master's `title` placeholder). If you omit it, the SDK infers the type from the layer's content type.
+
+| `type` value | Inferred when |
+|-------------|---------------|
+| `'image'` | Layer type is `image` |
+| `'chart'` | Layer type is `chart` |
+| `'table'` | Layer type is `table` |
+| `'body'` | Layer type is `text` |
+| `'other'` | All other layer types |
+
+### Creating slides from a layout
+
+Call `ablo.layouts.createSlide()` with the `LayoutResource` returned from `layouts.create()`, the `deckId`, an `order`, and a `fill` map keyed by placeholder name.
+
+```typescript
+import { text, bullets } from '@abloatai/decks';
+
+const slide = await ablo.layouts.createSlide(layout, {
+  deckId: deck.id,
+  order: 0,
+  title: 'Q3 Kickoff',
+  fill: {
+    title:    text('Q3 2025 Kickoff'),
+    subtitle: text('July 1 · All Hands'),
+  },
+});
+```
+
+For more complex fills — bullets, charts, images — use the content builders:
+
+```typescript
+import { text, bullets, barChart, image } from '@abloatai/decks';
+
+await ablo.layouts.createSlide(contentLayout, {
+  deckId: deck.id,
+  order: 1,
+  fill: {
+    heading: text('Revenue Highlights'),
+    body:    bullets(['Record Q3', '+40% YoY', 'New logo: Acme Corp']),
+    chart:   barChart({ data: [{ label: 'Q1', value: 420 }, { label: 'Q3', value: 780 }] }),
+  },
+});
+```
+
+<Warning>
+  If you reference a placeholder name in `fill` that doesn't exist on the layout, `layouts.createSlide()` throws immediately with a clear error listing the available placeholder names. Double-check spelling — placeholder names are case-sensitive.
+</Warning>
+
+### Master layouts
+
+A master layout is a special template in a container whose chrome is inherited by every other layout in that container. Mark a layout as master by passing `master: true` when creating it. Slides that opt out of master compositing can set `showMasterShapes: false`.
+
+```typescript
+const master = await ablo.layouts.create({
+  layoutId: 'lyt_container_abc123',
+  name: 'Master',
+  master: true,   // every layout in this container inherits these layers
+  layers: [
+    // Footer bar with logo — appears on every slide
+    {
+      type: 'shape',
+      shape: 'rectangle',
+      fill: '#5B4CF5',
+      at: { x: 0, y: 1040, w: 1920, h: 40 },
+    },
+    {
+      type: 'image',
+      url: 'https://cdn.example.com/logo-white.svg',
+      at: { x: 1760, y: 1044, w: 120, h: 32 },
+    },
+  ],
+});
+```
+
+### Full example: theme + layout together
+
+```typescript
+import { Decks, text, bullets, colorRef } from '@abloatai/decks';
+
+const ablo = new Decks(process.env.ABLO_API_KEY);
+
+// 1. Create a deck
+const deck = await ablo.decks.create({ title: 'Product Launch' });
+
+// 2. Create a theme and apply it atomically
+const theme = await ablo.themes.create({
+  name: 'Launch Theme',
+  colors: { brand: '#5B4CF5', brandLight: '#EEF0FF', textColor: '#0A0F1E',
+            textMuted: '#6B7280', surface: '#FFFFFF', card: '#F9FAFB', border: '#E5E7EB' },
+  fonts:  { heading: 'Inter', body: 'Inter' },
+  applyTo: deck.id,
+});
+
+// 3. Create a layout template
+const layout = await ablo.layouts.create({
+  layoutId: deck.layoutId!,
+  name: 'Content Slide',
+  layers: [
+    // Accent bar at the top — bound to the theme brand color
+    {
+      type: 'shape',
+      shape: 'rectangle',
+      fill: colorRef('brand'),
+      at: { x: 0, y: 0, w: 1920, h: 8 },
+    },
+    // Title placeholder
+    {
+      type: 'text',
+      text: 'Slide heading',
+      style: 'h1',
+      at: { x: 160, y: 80, w: 1600, h: 160 },
+      placeholder: { name: 'heading', type: 'body' },
+    },
+    // Body placeholder
+    {
+      type: 'text',
+      text: 'Content goes here',
+      style: 'body1',
+      at: { x: 160, y: 300, w: 1600, h: 680 },
+      placeholder: { name: 'body', type: 'body' },
+    },
+  ],
+});
+
+// 4. Create slides from the layout
+await ablo.layouts.createSlide(layout, {
+  deckId: deck.id,
+  order: 0,
+  fill: {
+    heading: text('Why We Win'),
+    body:    bullets(['Best-in-class UX', 'Enterprise security', '99.99% uptime SLA']),
+  },
+});
+
+await ablo.layouts.createSlide(layout, {
+  deckId: deck.id,
+  order: 1,
+  fill: {
+    heading: text('The Road Ahead'),
+    body:    bullets(['GA launch in Q4', 'Partner program in Q1', 'Series B fundraise']),
+  },
+});
+```
+
+<Tip>
+  When you pass a `LayoutResource` directly to `layouts.createSlide()`, the SDK validates your `fill` keys against `layout.placeholders` at the call site — before any network request is made. You'll get a descriptive error immediately if a key doesn't match, rather than a server-side failure.
+</Tip>

@@ -1,0 +1,211 @@
+---
+title: "Image Uploads: Host Images on Ablo's Managed Storage"
+sidebarTitle: "Image Uploads"
+description: "Upload image bytes to Ablo's hosted CDN with ablo.images.upload() and use the returned URL directly in any image layer, layout, or deck create call."
+---
+
+Ablo's SDK provides a built-in image upload API so you can host images alongside your presentation content without running your own storage. You call `ablo.images.upload()` with raw bytes and a MIME type, and the SDK uploads the file to Ablo's hosted storage on your behalf. You get back a CDN URL that you can drop straight into any `image()` layer or `{ type: 'image', url }` layer definition.
+
+## The upload method
+
+```typescript
+ablo.images.upload(params: UploadImageParams): Promise<UploadedImage>
+```
+
+**Parameters:**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `bytes` | `Uint8Array \| ArrayBuffer` | Yes | The raw image data. |
+| `contentType` | `ImageMime` | Yes | The MIME type of the image. |
+| `fileName` | `string` | No | A cosmetic filename used when storing the image. |
+| `deckId` | `string` | No | Associates this upload with a specific deck. |
+
+**Returns:**
+
+```typescript
+interface UploadedImage {
+  url: string;    // CDN URL — pass to image(url) or { type: 'image', url }
+  s3Key: string;  // storage key assigned to the uploaded file
+}
+```
+
+Your organisation is derived from your API key server-side. You never need to pass an `organizationId`.
+
+## Supported MIME types
+
+The `contentType` field must be one of the following values (the `ImageMime` type):
+
+```typescript
+type ImageMime =
+  | 'image/jpeg'
+  | 'image/png'
+  | 'image/gif'
+  | 'image/webp'
+  | 'image/svg+xml'
+  | 'image/avif';
+```
+
+Passing any other value will throw a validation error before the network request is made.
+
+## Reading from the filesystem (Node.js)
+
+Use `readFileSync` to load the file into a `Buffer`, then wrap it in `Uint8Array` before passing it to `upload()`.
+
+```typescript
+import { Decks } from '@abloatai/decks';
+import { readFileSync } from 'fs';
+
+const ablo = new Decks(process.env.ABLO_API_KEY);
+
+const bytes = readFileSync('./logo.png');
+const { url } = await ablo.images.upload({
+  bytes: new Uint8Array(bytes),
+  contentType: 'image/png',
+  fileName: 'logo.png',
+});
+
+// Use the URL directly in a layer definition
+const layer = {
+  type: 'image' as const,
+  url,
+  at: { x: 160, y: 120, w: 400, h: 300 },
+};
+
+// Or inside a full deck create call
+const deck = await ablo.decks.create({
+  title: 'Brand Deck',
+  slides: [
+    {
+      title: 'Cover',
+      layers: [
+        { type: 'image', url, at: { x: 760, y: 340, w: 400, h: 300 } },
+        {
+          type: 'text',
+          text: 'Welcome',
+          style: 'title',
+          at: { x: 160, y: 700, w: 1600, h: 160 },
+        },
+      ],
+    },
+  ],
+});
+```
+
+## Reading from a browser File input
+
+In the browser, convert the `File` to an `ArrayBuffer` using `file.arrayBuffer()`, then pass it directly — no `Uint8Array` wrapper needed.
+
+```typescript
+import { Decks } from '@abloatai/decks';
+
+const ablo = new Decks(import.meta.env.VITE_ABLO_API_KEY);
+
+async function uploadFile(file: File): Promise<string> {
+  const arrayBuffer = await file.arrayBuffer();
+
+  const { url } = await ablo.images.upload({
+    bytes: arrayBuffer,
+    contentType: file.type as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp' | 'image/svg+xml' | 'image/avif',
+    fileName: file.name,
+  });
+
+  return url;
+}
+
+// Wired up to an <input type="file"> change handler
+async function handleFileChange(event: Event) {
+  const input = event.target as HTMLInputElement;
+  const file = input.files?.[0];
+  if (!file) return;
+
+  const url = await uploadFile(file);
+  console.log('Uploaded to:', url);
+}
+```
+
+<Note>
+  The browser's `File.type` property is a string, so you will need to cast it to `ImageMime`. If you want runtime safety, validate it against the `IMAGE_MIME_TYPES` array exported from `@abloatai/decks` before the upload call.
+</Note>
+
+## Using an existing public URL
+
+If your image is already publicly accessible on the internet, you do not need to upload it at all. Pass the URL directly to the `image()` builder or inline `{ type: 'image', url }`. Ablo will auto-rehost it at render time if needed.
+
+```typescript
+import { image } from '@abloatai/decks';
+
+// Inline object style
+const layer = {
+  type: 'image' as const,
+  url: 'https://example.com/charts/revenue-q4.png',
+  at: { x: 160, y: 200, w: 1600, h: 700 },
+};
+
+// Builder style — same result
+const content = image('https://example.com/charts/revenue-q4.png');
+```
+
+<Tip>
+  Prefer `ablo.images.upload()` for assets under your control — it guarantees the image is durably stored alongside your presentation and won't break if the origin goes down.
+</Tip>
+
+## Uploading before creating a deck
+
+You can upload images before you begin building your deck, then reference the returned URLs inside `decks.create()`. This is useful when you have multiple images to upload in parallel.
+
+```typescript
+import { Decks } from '@abloatai/decks';
+import { readFileSync } from 'fs';
+
+const ablo = new Decks(process.env.ABLO_API_KEY);
+
+// Upload multiple images concurrently
+const [logoResult, heroResult] = await Promise.all([
+  ablo.images.upload({
+    bytes: new Uint8Array(readFileSync('./logo.png')),
+    contentType: 'image/png',
+    fileName: 'logo.png',
+  }),
+  ablo.images.upload({
+    bytes: new Uint8Array(readFileSync('./hero.jpg')),
+    contentType: 'image/jpeg',
+    fileName: 'hero.jpg',
+  }),
+]);
+
+// Now use both URLs in a single atomic deck creation
+const deck = await ablo.decks.create({
+  title: 'Product Launch',
+  slides: [
+    {
+      title: 'Cover',
+      layers: [
+        {
+          type: 'image',
+          url: heroResult.url,
+          at: { x: 0, y: 0, w: 1920, h: 1080 },
+        },
+        {
+          type: 'image',
+          url: logoResult.url,
+          at: { x: 1700, y: 20, w: 180, h: 60 },
+        },
+      ],
+    },
+  ],
+});
+```
+
+## Scoping uploads to a deck
+
+Pass `deckId` to associate the upload with a specific deck. This scopes the stored file under that deck, making it easier to reason about which assets belong to which presentation.
+
+```typescript
+const { url } = await ablo.images.upload({
+  bytes: new Uint8Array(readFileSync('./chart-export.png')),
+  contentType: 'image/png',
+  fileName: 'chart-export.png',
+  deckId: deck.id,
+});
+```

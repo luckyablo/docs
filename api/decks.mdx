@@ -1,0 +1,336 @@
+---
+title: "Decks API — Create, Retrieve, Update & Delete Decks"
+sidebarTitle: "Decks"
+description: "Manage presentation decks with the Ablo Decks SDK. Create entire slide trees in one atomic commit, then update or delete individual decks by id."
+---
+
+The `ablo.decks` namespace is the entry point for managing presentation decks. Every method resolves to a single atomic commit on the server, so a `create` call that includes slides and layers either succeeds completely or fails without partial state. Deck ids are minted client-side before the commit is sent, so you can capture the id immediately and use it in subsequent calls without an extra round-trip.
+
+---
+
+## `ablo.decks.create(input?, options?)`
+
+Creates a new deck. Pass `input.slides` to include the complete slide and layer tree in one commit. When omitted, an empty deck is created and slides can be added later via `ablo.slides.create`.
+
+### Parameters
+
+<ParamField body="input" type="CreateDeckInput" optional>
+  The deck configuration. All fields are optional; omit entirely to create a blank deck.
+
+  <Expandable title="input fields">
+    <ParamField body="title" type="string" optional>
+      Human-readable name shown in the workspace. Defaults to `"Untitled"` when omitted.
+    </ParamField>
+
+    <ParamField body="layoutId" type="string" optional>
+      Id of the parent `Layout` container (design system) the deck inherits chrome from.
+    </ParamField>
+
+    <ParamField body="themeId" type="string" optional>
+      Id of a `Theme` to apply. Controls the `:root` CSS variables used by all slides.
+    </ParamField>
+
+    <ParamField body="icon" type="string" optional>
+      Icon key displayed alongside the deck title in the workspace.
+    </ParamField>
+
+    <ParamField body="color" type="string" optional>
+      Hex accent color for the deck, for example `"#4F46E5"`.
+    </ParamField>
+
+    <ParamField body="slides" type="SlideSpec[]" optional>
+      Full slide and layer tree to create atomically with the deck. Each `SlideSpec` may itself carry a `layers` array. Slides are ordered by their position in the array (index `0` → `order: 0`).
+
+      <Expandable title="SlideSpec fields">
+        <ParamField body="title" type="string" optional>
+          Slide title.
+        </ParamField>
+        <ParamField body="templateId" type="string" optional>
+          `SlideLayout` id to attach a layout template to this slide.
+        </ParamField>
+        <ParamField body="layers" type="LayerInput[]" optional>
+          Flat layer descriptors. Each object is a discriminated union on `type` (`"text"`, `"bar"`, `"donut"`, `"chart"`, `"table"`, `"image"`, `"shape"`, `"icon"`, `"bullets"`, `"numbered"`).
+        </ParamField>
+        <ParamField body="background" type="SlideBackgroundInput" optional>
+          Solid color, gradient, image, or raw CSS background.
+        </ParamField>
+        <ParamField body="size" type="'16:9' | '16:10' | 'a4-portrait'" optional>
+          Size preset. `'16:9'` expands to 1920×1080, `'16:10'` to 1920×1200, `'a4-portrait'` to 2480×3508.
+        </ParamField>
+        <ParamField body="width" type="number" optional>
+          Explicit slide width in pixels (overrides `size`).
+        </ParamField>
+        <ParamField body="height" type="number" optional>
+          Explicit slide height in pixels (overrides `size`).
+        </ParamField>
+        <ParamField body="aspectRatio" type="'16:9' | '16:10' | '4:3' | 'custom'" optional>
+          Aspect ratio constraint.
+        </ParamField>
+        <ParamField body="showGrid" type="boolean" optional>
+          Toggle the snap grid overlay.
+        </ParamField>
+        <ParamField body="gridSize" type="number" optional>
+          Grid cell size in pixels.
+        </ParamField>
+        <ParamField body="showMasterShapes" type="boolean" optional>
+          When `false`, opt this slide out of master compositing from the parent layout.
+        </ParamField>
+      </Expandable>
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField body="options" type="RequestOptions" optional>
+  Per-call commit controls.
+
+  <Expandable title="options fields">
+    <ParamField body="wait" type="'queued' | 'confirmed'" optional default="confirmed">
+      `'confirmed'` (default) waits for the durable acknowledgement. `'queued'` returns as soon as the server accepts the write.
+    </ParamField>
+    <ParamField body="idempotencyKey" type="string" optional>
+      Idempotency key for safe retries. Repeated calls with the same key are deduplicated server-side.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+### Returns
+
+<ResponseField name="id" type="string">
+  Client-minted UUID for the new deck.
+</ResponseField>
+
+<ResponseField name="title" type="string">
+  The deck title (`"Untitled"` when not supplied).
+</ResponseField>
+
+<ResponseField name="layoutId" type="string | null">
+  The layout container id, or `null` if none was specified.
+</ResponseField>
+
+<ResponseField name="themeId" type="string | null">
+  The theme id, or `null` if none was specified.
+</ResponseField>
+
+<ResponseField name="slides" type="SlideResult[]">
+  One entry per slide passed in `input.slides`, in order.
+
+  <Expandable title="SlideResult fields">
+    <ResponseField name="id" type="string">
+      Client-minted UUID for the slide.
+    </ResponseField>
+    <ResponseField name="deckId" type="string">
+      The parent deck id.
+    </ResponseField>
+    <ResponseField name="title" type="string">
+      The slide title.
+    </ResponseField>
+    <ResponseField name="order" type="number">
+      Zero-based integer position in the deck.
+    </ResponseField>
+    <ResponseField name="layers" type="LayerResource[]">
+      One entry per layer, each carrying `{ id, slideId, type }`.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Example
+
+```typescript
+import { Decks } from '@abloatai/decks';
+
+const ablo = new Decks(process.env.ABLO_API_KEY!);
+
+// Create a deck with two slides and a layer on each
+const deck = await ablo.decks.create({
+  title: 'Q3 Market Update',
+  color: '#4F46E5',
+  slides: [
+    {
+      title: 'Key Metrics',
+      layers: [
+        {
+          type: 'text',
+          text: 'Revenue up 40%',
+          style: 'h1',
+          at: { x: 160, y: 120, w: 1600, h: 160 },
+        },
+        {
+          type: 'bar',
+          data: [
+            { label: 'Q1', value: 120 },
+            { label: 'Q2', value: 180 },
+            { label: 'Q3', value: 252 },
+          ],
+          at: { x: 160, y: 340, w: 900, h: 600 },
+        },
+      ],
+    },
+    {
+      title: 'Summary',
+      layers: [
+        {
+          type: 'text',
+          text: 'Thank you',
+          style: 'title',
+          at: { x: 400, y: 460, w: 1120, h: 160 },
+        },
+      ],
+    },
+  ],
+});
+
+console.log(deck.id);                    // deck UUID
+console.log(deck.slides[0].layers[0].id); // first layer UUID — save this for later updates
+```
+
+---
+
+## `ablo.decks.retrieve(id)`
+
+Fetches the stored record for a deck by id. Requires a readable client.
+
+### Parameters
+
+<ParamField path="id" type="string" required>
+  The deck id returned by `create`.
+</ParamField>
+
+### Returns
+
+<ResponseField name="id" type="string">
+  The deck UUID.
+</ResponseField>
+
+<ResponseField name="title" type="string">
+  The deck title.
+</ResponseField>
+
+<ResponseField name="layoutId" type="string | null">
+  The attached layout container id, or `null`.
+</ResponseField>
+
+<ResponseField name="themeId" type="string | null">
+  The attached theme id, or `null`.
+</ResponseField>
+
+### Example
+
+```typescript
+const deck = await ablo.decks.retrieve('deck_abc123');
+console.log(deck.title, deck.themeId);
+```
+
+---
+
+## `ablo.decks.update(params, options?)`
+
+Applies a field-level patch to an existing deck. Only the fields you include are changed; omitted fields are left untouched.
+
+### Parameters
+
+<ParamField body="params" type="UpdateDeckParams" required>
+  <Expandable title="params fields">
+    <ParamField body="id" type="string" required>
+      The deck id to update.
+    </ParamField>
+    <ParamField body="title" type="string" optional>
+      New deck title.
+    </ParamField>
+    <ParamField body="summary" type="string" optional>
+      Short description or AI-generated summary stored on the deck.
+    </ParamField>
+    <ParamField body="themeId" type="string | null" optional>
+      Replace or clear the attached theme. Pass `null` to detach.
+    </ParamField>
+    <ParamField body="layoutId" type="string | null" optional>
+      Replace or clear the attached layout container. Pass `null` to detach.
+    </ParamField>
+    <ParamField body="icon" type="string" optional>
+      New icon key.
+    </ParamField>
+    <ParamField body="color" type="string" optional>
+      New hex accent color.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField body="options" type="RequestOptions" optional>
+  <Expandable title="options fields">
+    <ParamField body="wait" type="'queued' | 'confirmed'" optional default="confirmed">
+      Acknowledgement level to wait for.
+    </ParamField>
+    <ParamField body="idempotencyKey" type="string" optional>
+      Idempotency key for safe retries.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+### Returns
+
+<ResponseField name="id" type="string">
+  The commit UUID.
+</ResponseField>
+
+<ResponseField name="status" type="'queued' | 'confirmed'">
+  The acknowledgement level reached.
+</ResponseField>
+
+<ResponseField name="lastSyncId" type="number" optional>
+  Monotonic sync cursor — use this to wait for a specific state in a real-time client.
+</ResponseField>
+
+### Example
+
+```typescript
+const receipt = await ablo.decks.update({
+  id: 'deck_abc123',
+  title: 'Q3 Market Update — Final',
+  color: '#10B981',
+});
+
+console.log(receipt.status); // 'confirmed'
+```
+
+---
+
+## `ablo.decks.delete(id, options?)`
+
+Permanently deletes a deck and all of its slides and layers in one atomic commit.
+
+### Parameters
+
+<ParamField path="id" type="string" required>
+  The deck id to delete.
+</ParamField>
+
+<ParamField body="options" type="RequestOptions" optional>
+  <Expandable title="options fields">
+    <ParamField body="wait" type="'queued' | 'confirmed'" optional default="confirmed">
+      Acknowledgement level to wait for.
+    </ParamField>
+    <ParamField body="idempotencyKey" type="string" optional>
+      Idempotency key for safe retries.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+### Returns
+
+<ResponseField name="id" type="string">
+  The commit UUID.
+</ResponseField>
+
+<ResponseField name="status" type="'queued' | 'confirmed'">
+  The acknowledgement level reached.
+</ResponseField>
+
+<ResponseField name="lastSyncId" type="number" optional>
+  Monotonic sync cursor.
+</ResponseField>
+
+### Example
+
+```typescript
+const receipt = await ablo.decks.delete('deck_abc123');
+console.log(receipt.status); // 'confirmed'
+```

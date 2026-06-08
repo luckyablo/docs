@@ -1,0 +1,214 @@
+---
+title: "Slide Layouts & Templates: Reusable Design Patterns"
+sidebarTitle: "Layouts & Templates"
+description: "Define reusable slide templates with named placeholder slots, then instantiate them with real content using layouts.createSlide() in one atomic commit."
+---
+
+A layout is a reusable slide template. It holds the static chrome — background colors, logo images, decorative shapes — plus named placeholder slots that mark where variable content goes. You create a layout once, then call `layouts.createSlide()` to stamp out a fully-populated slide by filling each slot by name. This two-phase approach keeps your design consistent across a deck while letting you swap content programmatically.
+
+## How layouts work
+
+Layouts live inside a **layout container**, identified by a `layoutId`. Every deck has its own layout container (accessible via `deck.layoutId` after creation), so layouts you define for one deck stay scoped to that deck.
+
+When you create a layout with `layouts.create()`, you define:
+
+- **Static layers** — content that appears on every slide stamped from this layout (a header bar, a company logo, a footer).
+- **Placeholder layers** — layers tagged with a `placeholder` name. When you call `layouts.createSlide()`, you supply a `fill` map that replaces each placeholder with real content.
+
+<Note>
+  The `layoutId` you pass to `layouts.create()` is the **container** id — it comes from the deck's `layoutId` field. It is not the layout's own id (which is returned from `layouts.create()`).
+</Note>
+
+## PlaceholderSpec
+
+Every layer in a layout can carry a `placeholder` field. Pass a bare string for a simple name, or a full `PlaceholderSpec` object to add a visible hint and an explicit type:
+
+```typescript
+interface PlaceholderSpec {
+  name: string;           // stable identity — how you address the slot in `fill`
+  type?: PlaceholderType; // 'image' | 'chart' | 'table' | 'body' | 'other'
+  text?: string;          // hint shown in the empty slot in the editor
+}
+```
+
+The `type` drives render-family selection and master inheritance. If you omit it, the SDK infers it from the layer's content type (a `text` layer becomes `'body'`, a `bar` layer becomes `'chart'`, an `image` layer becomes `'image'`).
+
+## Master layouts
+
+Setting `master: true` on a layout makes it the master for its container. Every other layout in the same container automatically inherits the master's layers. Master inheritance deduplicates by placeholder type, so a layout's own `title` placeholder overrides the master's `title` without duplicating it.
+
+```typescript
+// Create the master layout — shared chrome for the whole deck
+await ablo.layouts.create({
+  layoutId: deckRecord.layoutId!,
+  name: 'Master',
+  master: true,
+  layers: [
+    {
+      type: 'image',
+      url: 'https://cdn.example.com/logo.svg',
+      at: { x: 1700, y: 20, w: 180, h: 60 },
+    },
+    {
+      type: 'shape',
+      kind: 'rectangle',
+      at: { x: 0, y: 1040, w: 1920, h: 40 },
+      fills: [{ type: 'solid', color: '#0F172A' }],
+    },
+  ],
+});
+```
+
+## Complete walkthrough
+
+<Steps>
+  <Step title="Create the deck">
+    You need a deck before you can create a layout, because the layout's container id comes from the deck.
+
+    ```typescript
+    import { Decks, text, bullets, barChart } from '@abloatai/decks';
+
+    const ablo = new Decks(process.env.ABLO_API_KEY);
+
+    const deck = await ablo.decks.create({ title: 'Q3 Update' });
+    ```
+  </Step>
+
+  <Step title="Retrieve the deck to get its layoutId">
+    The `DeckResource` returned by `decks.create()` includes a `layoutId` field (which may be `null` for a brand-new deck before the server provisions the container). A `retrieve()` call returns the authoritative record after it has been provisioned.
+
+    ```typescript
+    const deckRecord = await ablo.decks.retrieve(deck.id);
+    ```
+  </Step>
+
+  <Step title="Create a layout template with placeholder slots">
+    Define the template layers. Each layer that should be filled at instantiation time gets a `placeholder` name.
+
+    ```typescript
+    const layout = await ablo.layouts.create({
+      layoutId: deckRecord.layoutId!,
+      name: 'Content Slide',
+      layers: [
+        {
+          type: 'text',
+          text: 'Slide Title',
+          style: 'h1',
+          placeholder: 'title',
+          at: { x: 160, y: 80, w: 1600, h: 120 },
+        },
+        {
+          type: 'bullets',
+          items: ['Point one', 'Point two'],
+          placeholder: {
+            name: 'body',
+            type: 'body',
+            text: 'Add your content here',
+          },
+          at: { x: 160, y: 240, w: 800, h: 600 },
+        },
+        {
+          type: 'bar',
+          data: [{ label: 'A', value: 1 }],
+          placeholder: 'chart',
+          at: { x: 1000, y: 240, w: 760, h: 600 },
+        },
+      ],
+    });
+    ```
+
+    The returned `LayoutResource` includes a `placeholders` map keyed by name — you will use this object directly in the next step.
+  </Step>
+
+  <Step title="Instantiate a slide from the template">
+    Call `layouts.createSlide()` and supply `fill` entries keyed by placeholder name. The SDK creates the slide and all filled layers in one atomic commit.
+
+    ```typescript
+    const slide = await ablo.layouts.createSlide(layout, {
+      deckId: deck.id,
+      order: 0,
+      title: 'Product Update',
+      fill: {
+        title: text('Product Launch Results', { style: 'h1' }),
+        body: bullets([
+          'Revenue up 40%',
+          'NPS score: 72',
+          '3 new enterprise deals',
+        ]),
+        chart: barChart({
+          data: [
+            { label: 'Q1', value: 120 },
+            { label: 'Q2', value: 168 },
+          ],
+        }),
+      },
+    });
+
+    console.log('Slide ID:', slide.id);
+    ```
+  </Step>
+</Steps>
+
+## Reusing a layout across multiple slides
+
+Once you have a `LayoutResource` in hand, you can stamp out as many slides as you need. Each call to `layouts.createSlide()` is independent — a failure on one slide does not affect the others.
+
+```typescript
+const quarters = [
+  { label: 'Q1', revenue: 120, nps: 68 },
+  { label: 'Q2', revenue: 168, nps: 72 },
+  { label: 'Q3', revenue: 201, nps: 75 },
+];
+
+for (const [i, q] of quarters.entries()) {
+  await ablo.layouts.createSlide(layout, {
+    deckId: deck.id,
+    order: i,
+    title: `${q.label} Results`,
+    fill: {
+      title: text(`${q.label} Performance`, { style: 'h1' }),
+      body: bullets([
+        `Revenue: $${q.revenue}k`,
+        `NPS: ${q.nps}`,
+      ]),
+      chart: barChart({
+        data: [{ label: q.label, value: q.revenue }],
+      }),
+    },
+  });
+}
+```
+
+## Layout management
+
+After creation, you can update or delete a layout and its individual layers.
+
+<CodeGroup>
+```typescript Rename a layout
+await ablo.layouts.update({
+  id: layout.id,
+  name: 'Updated Content Slide',
+});
+```
+
+```typescript Add a layer to an existing layout
+const newLayer = await ablo.layouts.addLayer(layout.id, {
+  type: 'text',
+  text: 'Confidential',
+  style: 'caption',
+  at: { x: 160, y: 1020, w: 400, h: 40 },
+});
+```
+
+```typescript Remove a layout layer
+await ablo.layouts.deleteLayer(layerId);
+```
+
+```typescript Delete the layout entirely
+await ablo.layouts.delete(layout.id);
+```
+</CodeGroup>
+
+<Warning>
+  Deleting a layout does not delete slides that were already stamped from it. Those slides keep their filled layers and continue to render normally.
+</Warning>
